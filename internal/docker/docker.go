@@ -25,8 +25,10 @@ func Command(cfg config.Config, run runner.Runner) cli.Command {
 		Children:    svc.commands(),
 		Examples: []string{
 			"docker status",
+			"docker status api",
 			"docker ps -a",
 			"d logs api --tail 100",
+			"d up -d",
 			"d compose up -d",
 		},
 	}
@@ -44,7 +46,7 @@ func LegacyCommands(cfg config.Config, run runner.Runner) []cli.Command {
 
 func (s service) commands() []cli.Command {
 	return []cli.Command{
-		{Name: "status", Description: "Mostra se o Docker esta acessivel", Usage: "docker status", Run: s.status},
+		{Name: "status", Description: "Mostra Docker e status de containers", Usage: "docker status [container...]", Run: s.status},
 		{Name: "ps", Aliases: []string{"containers"}, Description: "Lista containers", Usage: "docker ps [-a|--all]", Run: s.ps},
 		{Name: "images", Aliases: []string{"imgs"}, Description: "Lista imagens", Usage: "docker images", Run: s.noExtra("images")},
 		{Name: "volumes", Aliases: []string{"vols"}, Description: "Lista volumes", Usage: "docker volumes", Run: s.noExtra("volume", "ls")},
@@ -59,7 +61,11 @@ func (s service) commands() []cli.Command {
 		{Name: "rmi", Aliases: []string{"remove-image"}, Description: "Remove imagens", Usage: "docker rmi [-f|--force] <image...>", Run: s.removeImages},
 		{Name: "pull", Description: "Baixa uma imagem", Usage: "docker pull <image>", Run: s.withArgs("pull")},
 		{Name: "run", Description: "Executa docker run", Usage: "docker run <docker run args...>", Run: s.withArgs("run")},
+		{Name: "up", Description: "Sobe servicos do Docker Compose", Usage: "docker up [args...]", Run: s.composeWith("up")},
+		{Name: "down", Description: "Remove servicos do Docker Compose", Usage: "docker down [args...]", Run: s.composeWith("down")},
 		{Name: "compose", Aliases: []string{"c"}, Description: "Executa Docker Compose", Usage: "docker compose <args...>", Run: s.compose},
+		{Name: "compose-status", Description: "Mostra status dos servicos do Compose", Usage: "docker compose-status [args...]", Run: s.composeWith("ps")},
+		{Name: "compose-up", Description: "Sobe servicos do Compose", Usage: "docker compose-up [args...]", Run: s.composeWith("up")},
 		{Name: "compose-ps", Description: "Lista servicos do Compose", Usage: "docker compose-ps [args...]", Run: s.composeWith("ps")},
 		{Name: "compose-logs", Description: "Exibe logs do Compose", Usage: "docker compose-logs [args...]", Run: s.composeWith("logs")},
 		{Name: "compose-stop", Description: "Para servicos do Compose", Usage: "docker compose-stop [servico...]", Run: s.composeWith("stop")},
@@ -72,16 +78,19 @@ func (s service) commands() []cli.Command {
 }
 
 func (s service) status(_ cli.Context, args []string) error {
-	if len(args) > 0 {
-		return cli.UsageError("status nao recebe argumentos")
-	}
-
 	fmt.Println("Docker encontrado.")
 	if err := s.run([]string{"version", "--format", "Cliente: {{.Client.Version}} | Servidor: {{.Server.Version}}"}, runner.DefaultOptions()); err != nil {
 		return fmt.Errorf("nao foi possivel falar com o Docker daemon: %w", err)
 	}
 
 	fmt.Println()
+	if len(args) > 0 {
+		fmt.Println("Containers informados:")
+		dockerArgs := []string{"inspect", "--format", "{{.Name}} | Status: {{.State.Status}} | Running: {{.State.Running}} | Health: {{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}} | Image: {{.Config.Image}}"}
+		dockerArgs = append(dockerArgs, args...)
+		return s.run(dockerArgs, runner.DefaultOptions())
+	}
+
 	fmt.Println("Containers:")
 	return s.run([]string{"ps", "-a", "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}\t{{.Ports}}"}, runner.DefaultOptions())
 }

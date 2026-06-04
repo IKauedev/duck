@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"duck/internal/aws"
 	"duck/internal/cli"
 	"duck/internal/config"
 	"duck/internal/docker"
@@ -37,6 +38,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		docker.Command(cfg, run),
 		golang.Command(cfg, run),
 		kubernetes.Command(cfg, run),
+		aws.Command(cfg, run),
 	}
 
 	commands = append(commands, docker.LegacyCommands(cfg, run)...)
@@ -53,6 +55,7 @@ func status(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 		wsl.Check(cfg, run)
 		checkTool("Docker", cfg.DockerBin, []string{"version", "--format", "{{.Client.Version}}"}, run)
 		checkTool("Kubernetes", cfg.KubectlBin, []string{"config", "current-context"}, run)
+		checkTool("AWS", cfg.AWSBin, []string{"--version"}, run)
 		return nil
 	}
 }
