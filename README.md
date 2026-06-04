@@ -149,6 +149,8 @@ duck docker start <container...>
 duck docker stop <container...>
 duck docker restart <container...>
 duck docker rm [-f|--force] <container...>
+duck docker rm-all [-f|--force]
+duck docker clean-all [-f|--force]
 duck docker rmi [-f|--force] <image...>
 duck docker pull <image>
 duck docker run <argumentos do docker run>
@@ -174,6 +176,8 @@ Alias curto:
 ```sh
 duck d ps -a
 duck d status api
+duck d rm-all --force
+duck d clean-all --force
 duck d up -d
 duck d compose up -d
 duck d compose-down
@@ -184,6 +188,8 @@ Atalhos legados tambem continuam funcionando:
 ```sh
 duck ps -a
 duck images
+duck rm-all --force
+duck clean-all --force
 duck compose up -d
 duck up -d
 duck down
@@ -304,6 +310,8 @@ Comandos destrutivos pedem confirmacao quando usados sem flags de confirmacao:
 
 ```sh
 duck docker rm api
+duck docker rm-all
+duck docker clean-all
 duck docker rmi minha-imagem:latest
 duck docker prune system
 duck kube delete deployment api -n apps
@@ -316,6 +324,8 @@ Para automacoes, use `--force`, `--yes` ou `-y` quando disponivel:
 
 ```sh
 duck docker rm --force api
+duck docker rm-all --force
+duck docker clean-all --force
 duck docker prune system --force
 duck kube delete deployment api -n apps --yes
 duck aws s3-rm s3://meu-bucket/prefix --recursive --force
