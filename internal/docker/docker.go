@@ -2,6 +2,7 @@ package docker
 
 import (
 	"fmt"
+	"strings"
 
 	"duck/internal/cli"
 	"duck/internal/config"
@@ -58,6 +59,8 @@ func (s service) commands() []cli.Command {
 		{Name: "shell", Aliases: []string{"sh"}, Description: "Abre shell no container", Usage: "docker shell <container> [sh|bash|ash|powershell]", Run: s.shell},
 		{Name: "exec", Description: "Executa comando no container", Usage: "docker exec <container> -- <comando...>", Run: s.exec},
 		{Name: "rm", Aliases: []string{"remove"}, Description: "Remove containers", Usage: "docker rm [-f|--force] <container...>", Run: s.removeContainers},
+		{Name: "rm-all", Aliases: []string{"remove-all"}, Description: "Remove todos os containers", Usage: "docker rm-all [-f|--force]", Run: s.removeAllContainers},
+		{Name: "clean-all", Aliases: []string{"cleanup", "reset"}, Description: "Limpa todo o ambiente Docker", Usage: "docker clean-all [-f|--force]", Run: s.cleanAll},
 		{Name: "rmi", Aliases: []string{"remove-image"}, Description: "Remove imagens", Usage: "docker rmi [-f|--force] <image...>", Run: s.removeImages},
 		{Name: "pull", Description: "Baixa uma imagem", Usage: "docker pull <image>", Run: s.withArgs("pull")},
 		{Name: "run", Description: "Executa docker run", Usage: "docker run <docker run args...>", Run: s.withArgs("run")},
@@ -190,6 +193,66 @@ func (s service) removeContainers(_ cli.Context, args []string) error {
 		dockerArgs = append(dockerArgs, "-f")
 	}
 	dockerArgs = append(dockerArgs, targets...)
+	return s.run(dockerArgs, runner.DefaultOptions())
+}
+
+func (s service) removeAllContainers(_ cli.Context, args []string) error {
+	force, rest := parseForceTargets(args)
+	if len(rest) > 0 {
+		return cli.UsageError("rm-all aceita apenas -f, --force, -y ou --yes")
+	}
+
+	return s.removeAllContainersWithConfirm(force, "Remover todos os containers, incluindo containers em execucao? [s/N] ")
+}
+
+func (s service) cleanAll(_ cli.Context, args []string) error {
+	force, rest := parseForceTargets(args)
+	if len(rest) > 0 {
+		return cli.UsageError("clean-all aceita apenas -f, --force, -y ou --yes")
+	}
+
+	if !force {
+		ok, err := prompt.Confirm("Limpar todo o ambiente Docker? Isto remove containers, imagens nao usadas, volumes, redes e cache. [s/N] ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Println("Cancelado.")
+			return nil
+		}
+	}
+
+	if err := s.removeAllContainersWithConfirm(true, ""); err != nil {
+		return err
+	}
+
+	return s.run([]string{"system", "prune", "-a", "--volumes", "-f"}, runner.DefaultOptions())
+}
+
+func (s service) removeAllContainersWithConfirm(force bool, message string) error {
+	output, err := s.runner.Output(s.bin, []string{"ps", "-aq"})
+	if err != nil {
+		return err
+	}
+
+	targets := nonEmptyLines(output)
+	if len(targets) == 0 {
+		fmt.Println("Nenhum container encontrado.")
+		return nil
+	}
+
+	if !force {
+		ok, err := prompt.Confirm(message)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Println("Cancelado.")
+			return nil
+		}
+	}
+
+	dockerArgs := append([]string{"rm", "-f"}, targets...)
 	return s.run(dockerArgs, runner.DefaultOptions())
 }
 
@@ -352,4 +415,12 @@ func parseForceTargets(args []string) (bool, []string) {
 	}
 
 	return force, targets
+}
+
+func nonEmptyLines(output string) []string {
+	lines := strings.Fields(output)
+	if len(lines) == 0 {
+		return nil
+	}
+	return lines
 }

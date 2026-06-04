@@ -7,12 +7,14 @@ on:
       - master
       - hotfix/*
       - release/*
+      - feature/*
   pull_request:
     branches:
       - develop
       - master
       - hotfix/*
       - release/*
+      - feature/*
 
 permissions:
   contents: read
