@@ -92,7 +92,7 @@ func PrintHelp(ctx Context, commands []Command, topic []string) {
 		return
 	}
 
-	fmt.Fprintln(ctx.Stdout, "Duck e um utilitario de terminal para Docker, Kubernetes e Go.")
+	fmt.Fprintln(ctx.Stdout, "Duck e um utilitario de terminal para Docker, Kubernetes, AWS e Go.")
 	fmt.Fprintln(ctx.Stdout)
 	fmt.Fprintln(ctx.Stdout, "Uso:")
 	fmt.Fprintf(ctx.Stdout, "  %s <comando> [argumentos]\n\n", ctx.AppName)
@@ -103,6 +103,7 @@ func PrintHelp(ctx Context, commands []Command, topic []string) {
 	fmt.Fprintf(ctx.Stdout, "  %s docker ps -a\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s go check\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s kube pods -n default\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s aws whoami\n", ctx.AppName)
 }
 
 func printTopic(ctx Context, commands []Command, topic []string, path []string) {

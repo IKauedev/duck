@@ -1,8 +1,8 @@
 # Duck
 
-`duck` e um utilitario de terminal feito em Go para simplificar tarefas comuns de Docker, Kubernetes e projetos Go no Windows, WSL e Linux.
+`duck` e um utilitario de terminal feito em Go para simplificar tarefas comuns de Docker, Kubernetes, AWS e projetos Go no Windows, WSL e Linux.
 
-Ele chama as ferramentas oficiais instaladas na maquina (`docker`, `kubectl` e `go`), entao continua compativel com Docker Desktop, Docker Engine, Kubernetes local/remoto e qualquer instalacao Go padrao.
+Ele chama as ferramentas oficiais instaladas na maquina (`docker`, `kubectl`, `aws` e `go`), entao continua compativel com Docker Desktop, Docker Engine, Kubernetes local/remoto, AWS CLI e qualquer instalacao Go padrao.
 
 ## Requisitos
 
@@ -10,6 +10,7 @@ Ele chama as ferramentas oficiais instaladas na maquina (`docker`, `kubectl` e `
 - Docker instalado para comandos `duck docker`
 - Docker Compose como plugin `docker compose` ou binario `docker-compose`
 - Kubectl instalado para comandos `duck kube`
+- AWS CLI instalado para comandos `duck aws`
 - WSL instalado no Windows, caso voce queira usar Docker/Linux via WSL
 
 Verifique:
@@ -19,6 +20,7 @@ go version
 docker version
 docker compose version
 kubectl version --client
+aws --version
 ```
 
 ## Build
@@ -89,12 +91,13 @@ duck setup path --dir /caminho/customizado
 
 ## Variaveis de Ambiente
 
-Por padrao o Duck procura `docker`, `kubectl` e `go` no `PATH`. Se quiser apontar para binarios especificos, use:
+Por padrao o Duck procura `docker`, `kubectl`, `aws` e `go` no `PATH`. Se quiser apontar para binarios especificos, use:
 
 ```sh
 DUCK_DOCKER_BIN=/caminho/para/docker
 DUCK_DOCKER_COMPOSE_BIN=/caminho/para/docker-compose
 DUCK_KUBECTL_BIN=/caminho/para/kubectl
+DUCK_AWS_BIN=/caminho/para/aws
 DUCK_GO_BIN=/caminho/para/go
 DUCK_WSL_BIN=/caminho/para/wsl
 ```
@@ -104,6 +107,8 @@ Variaveis nativas continuam funcionando normalmente, por exemplo:
 ```sh
 DOCKER_HOST=tcp://localhost:2375
 KUBECONFIG=/caminho/para/kubeconfig
+AWS_PROFILE=dev
+AWS_REGION=us-east-1
 ```
 
 ## Comandos Gerais
@@ -117,9 +122,10 @@ duck wsl status
 duck docker help
 duck go help
 duck kube help
+duck aws help
 ```
 
-`duck status` mostra a disponibilidade de Go, Docker e Kubernetes sem impedir o uso dos demais grupos caso uma ferramenta esteja ausente.
+`duck status` mostra a disponibilidade de Go, Docker, Kubernetes e AWS sem impedir o uso dos demais grupos caso uma ferramenta esteja ausente.
 
 ## Docker
 
@@ -127,6 +133,7 @@ Grupo principal:
 
 ```sh
 duck docker status
+duck docker status <container...>
 duck docker ps
 duck docker ps -a
 duck docker images
@@ -145,7 +152,11 @@ duck docker rm [-f|--force] <container...>
 duck docker rmi [-f|--force] <image...>
 duck docker pull <image>
 duck docker run <argumentos do docker run>
+duck docker up [argumentos do docker compose up]
+duck docker down [argumentos do docker compose down]
 duck docker compose <argumentos do docker compose>
+duck docker compose-status
+duck docker compose-up [argumentos]
 duck docker compose-ps
 duck docker compose-logs
 duck docker compose-stop [servico...]
@@ -162,6 +173,8 @@ Alias curto:
 
 ```sh
 duck d ps -a
+duck d status api
+duck d up -d
 duck d compose up -d
 duck d compose-down
 ```
@@ -172,6 +185,8 @@ Atalhos legados tambem continuam funcionando:
 duck ps -a
 duck images
 duck compose up -d
+duck up -d
+duck down
 duck compose-stop
 ```
 
@@ -246,6 +261,43 @@ duck k pods -n default
 duck k logs api-123 -n apps --tail 100
 ```
 
+## AWS
+
+Grupo principal:
+
+```sh
+duck aws status
+duck aws profiles
+duck aws configure
+duck aws whoami [--profile dev] [--region us-east-1]
+duck aws s3-ls [s3://bucket/prefix]
+duck aws s3-cp <origem> <destino> [args...]
+duck aws s3-sync <origem> <destino> [args...]
+duck aws s3-rm <s3://bucket/prefix> [--recursive] [-f|--force]
+duck aws ec2-instances [--profile dev] [--region us-east-1]
+duck aws ec2-start <instance-id...> [--profile dev] [--region us-east-1]
+duck aws ec2-stop <instance-id...> [--profile dev] [--region us-east-1] [-f|--force]
+duck aws ec2-reboot <instance-id...> [--profile dev] [--region us-east-1] [-f|--force]
+duck aws eks-clusters [--profile dev] [--region us-east-1]
+duck aws eks-describe <cluster> [--profile dev] [--region us-east-1]
+duck aws eks-use <cluster> [--alias nome] [--profile dev] [--region us-east-1]
+duck aws eks-update-kubeconfig <cluster> [--alias nome] [--profile dev] [--region us-east-1]
+duck aws ecr-login <registry> [--profile dev] [--region us-east-1]
+duck aws raw <argumentos diretos do aws>
+```
+
+Alias curto:
+
+```sh
+duck a whoami --profile dev
+duck a s3-ls s3://meu-bucket
+duck a ec2-instances --region us-east-1
+duck a ec2-start i-0123456789abcdef0 --region us-east-1
+duck a eks-use meu-cluster --region us-east-1
+```
+
+Os comandos AWS usam a configuracao normal da AWS CLI, incluindo `~/.aws/config`, `~/.aws/credentials`, `AWS_PROFILE`, `AWS_REGION` e flags `--profile`/`--region` quando aceitas pelo atalho.
+
 ## Acoes Destrutivas
 
 Comandos destrutivos pedem confirmacao quando usados sem flags de confirmacao:
@@ -255,6 +307,9 @@ duck docker rm api
 duck docker rmi minha-imagem:latest
 duck docker prune system
 duck kube delete deployment api -n apps
+duck aws s3-rm s3://meu-bucket/prefix --recursive
+duck aws ec2-stop i-0123456789abcdef0
+duck aws ec2-reboot i-0123456789abcdef0
 ```
 
 Para automacoes, use `--force`, `--yes` ou `-y` quando disponivel:
@@ -263,13 +318,15 @@ Para automacoes, use `--force`, `--yes` ou `-y` quando disponivel:
 duck docker rm --force api
 duck docker prune system --force
 duck kube delete deployment api -n apps --yes
+duck aws s3-rm s3://meu-bucket/prefix --recursive --force
+duck aws ec2-stop i-0123456789abcdef0 --yes
 ```
 
 ## Observacoes Por Sistema
 
 ### Windows
 
-Use com Docker Desktop aberto. Se `docker`, `kubectl` e `go` funcionam no PowerShell, o `duck` tambem funcionara. Apos `duck install`, abra um novo terminal para carregar o novo `Path` do usuario.
+Use com Docker Desktop aberto. Se `docker`, `kubectl`, `aws` e `go` funcionam no PowerShell, o `duck` tambem funcionara. Apos `duck install`, abra um novo terminal para carregar o novo `Path` do usuario.
 
 ### WSL
 
