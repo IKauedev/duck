@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/prompt"
-	"duck/internal/runner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/prompt"
+	"github.com/IKauedev/duck/internal/runner"
 )
 
 type service struct {
@@ -52,6 +54,7 @@ func (s service) commands() []cli.Command {
 	return []cli.Command{
 		{Name: "status", Description: "Mostra Docker e status de containers", Usage: "docker status [container...]", Run: s.status},
 		{Name: "ps", Aliases: []string{"containers"}, Description: "Lista containers", Usage: "docker ps [-a|--all]", Run: s.ps},
+		{Name: "pick", Description: "Seleciona um container interativamente", Usage: "docker pick [logs|shell|start|stop|restart|inspect]", Run: s.pick},
 		{Name: "find", Description: "Busca containers e imagens por nome", Usage: "docker find <termo>", Run: s.find},
 		{Name: "stats", Description: "Mostra uso de recursos dos containers", Usage: "docker stats [container...]", Run: s.stats},
 		{Name: "ports", Description: "Mostra portas publicadas de um container", Usage: "docker ports <container>", Run: s.ports},
@@ -130,6 +133,60 @@ func (s service) ps(_ cli.Context, args []string) error {
 	}
 
 	return s.run(dockerArgs, runner.DefaultOptions())
+}
+
+func (s service) pick(_ cli.Context, args []string) error {
+	action := ""
+	if len(args) > 1 {
+		return cli.UsageError("use: docker pick [logs|shell|start|stop|restart|inspect]")
+	}
+	if len(args) == 1 {
+		if !validPickAction(args[0]) {
+			return cli.UsageError("acao invalida para pick: " + args[0])
+		}
+		action = args[0]
+	}
+
+	output, err := s.runner.Output(s.bin, []string{"ps", "-a", "--format", "{{.Names}}\t{{.Status}}\t{{.Image}}"})
+	if err != nil {
+		return err
+	}
+	containers := parseContainerOptions(output)
+	if len(containers) == 0 {
+		fmt.Println("Nenhum container encontrado.")
+		return nil
+	}
+
+	result, err := tea.NewProgram(newPickModel(containers, action)).Run()
+	if err != nil {
+		return err
+	}
+	model, ok := result.(pickModel)
+	if !ok || model.cancelled || model.selected < 0 {
+		fmt.Println("Cancelado.")
+		return nil
+	}
+
+	selectedAction := model.action
+	if selectedAction == "" {
+		selectedAction = pickActions[model.actionCursor]
+	}
+	return s.runPickedAction(selectedAction, containers[model.selected].name)
+}
+
+func (s service) runPickedAction(action string, container string) error {
+	switch action {
+	case "logs":
+		return s.run([]string{"logs", "--tail", "100", container}, runner.DefaultOptions())
+	case "shell":
+		return s.run([]string{"exec", "-it", container, "sh"}, runner.InteractiveOptions())
+	case "start", "stop", "restart":
+		return s.run([]string{action, container}, runner.DefaultOptions())
+	case "inspect":
+		return s.run([]string{"inspect", "--format", "Nome: {{.Name}}\nImagem: {{.Config.Image}}\nStatus: {{.State.Status}}\nRunning: {{.State.Running}}\nStarted: {{.State.StartedAt}}\nIP: {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}\nPortas: {{json .NetworkSettings.Ports}}", container}, runner.DefaultOptions())
+	default:
+		return cli.UsageError("acao invalida para pick: " + action)
+	}
 }
 
 func (s service) find(_ cli.Context, args []string) error {
@@ -653,6 +710,136 @@ func parseForceTargets(args []string) (bool, []string) {
 	}
 
 	return force, targets
+}
+
+type containerOption struct {
+	name   string
+	status string
+	image  string
+}
+
+type pickModel struct {
+	containers   []containerOption
+	action       string
+	selected     int
+	cursor       int
+	actionCursor int
+	stage        int
+	cancelled    bool
+}
+
+var (
+	pickActions       = []string{"logs", "shell", "start", "stop", "restart", "inspect"}
+	pickTitleStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("229"))
+	pickSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("62")).Padding(0, 1)
+	pickMutedStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+)
+
+func newPickModel(containers []containerOption, action string) pickModel {
+	return pickModel{containers: containers, action: action, selected: -1}
+}
+
+func (m pickModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m pickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	key, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+	switch key.String() {
+	case "ctrl+c", "esc", "q":
+		m.cancelled = true
+		return m, tea.Quit
+	case "up", "k":
+		if m.stage == 0 && m.cursor > 0 {
+			m.cursor--
+		}
+		if m.stage == 1 && m.actionCursor > 0 {
+			m.actionCursor--
+		}
+	case "down", "j":
+		if m.stage == 0 && m.cursor < len(m.containers)-1 {
+			m.cursor++
+		}
+		if m.stage == 1 && m.actionCursor < len(pickActions)-1 {
+			m.actionCursor++
+		}
+	case "enter":
+		if m.stage == 0 {
+			m.selected = m.cursor
+			if m.action != "" {
+				return m, tea.Quit
+			}
+			m.stage = 1
+			return m, nil
+		}
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m pickModel) View() string {
+	var builder strings.Builder
+	if m.stage == 0 {
+		builder.WriteString(pickTitleStyle.Render("Escolha um container"))
+		builder.WriteString("\n\n")
+		for index, container := range m.containers {
+			line := fmt.Sprintf("%s  %s  %s", container.name, container.status, container.image)
+			if index == m.cursor {
+				builder.WriteString(pickSelectedStyle.Render("> " + line))
+			} else {
+				builder.WriteString("  " + line)
+			}
+			builder.WriteString("\n")
+		}
+	} else {
+		builder.WriteString(pickTitleStyle.Render("Escolha a acao para " + m.containers[m.selected].name))
+		builder.WriteString("\n\n")
+		for index, action := range pickActions {
+			if index == m.actionCursor {
+				builder.WriteString(pickSelectedStyle.Render("> " + action))
+			} else {
+				builder.WriteString("  " + action)
+			}
+			builder.WriteString("\n")
+		}
+	}
+	builder.WriteString("\n")
+	builder.WriteString(pickMutedStyle.Render("setas/j/k navegam | enter seleciona | q sai"))
+	builder.WriteString("\n")
+	return builder.String()
+}
+
+func parseContainerOptions(output string) []containerOption {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	containers := make([]containerOption, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 3)
+		if len(parts) < 3 {
+			continue
+		}
+		containers = append(containers, containerOption{
+			name:   strings.TrimSpace(parts[0]),
+			status: strings.TrimSpace(parts[1]),
+			image:  strings.TrimSpace(parts[2]),
+		})
+	}
+	return containers
+}
+
+func validPickAction(action string) bool {
+	for _, candidate := range pickActions {
+		if candidate == action {
+			return true
+		}
+	}
+	return false
 }
 
 func nonEmptyLines(output string) []string {

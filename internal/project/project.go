@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"duck/internal/cli"
+	"github.com/IKauedev/duck/internal/cli"
 )
 
 func Command() cli.Command {

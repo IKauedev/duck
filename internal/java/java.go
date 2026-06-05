@@ -9,9 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/runner"
+	"github.com/IKauedev/duck/internal/certstore"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/runner"
 )
 
 type service struct {
@@ -36,6 +37,7 @@ func Command(cfg config.Config, run runner.Runner) cli.Command {
 			{Name: "use", Description: "Alterna Java no Duck ou persiste no usuario", Usage: "java use <alias|java-home> [--persist]", Run: svc.use},
 			{Name: "path", Description: "Mostra comandos para configurar PATH", Usage: "java path <alias|java-home>", Run: svc.path},
 			{Name: "home", Description: "Mostra JAVA_HOME configurado no Duck", Usage: "java home", Run: svc.home},
+			{Name: "cert", Description: "Importa certificado no truststore da JVM atual", Usage: "java cert <arquivo|url> [--alias nome] [--storepass senha] [--cacerts caminho] [--no-sudo]", Run: svc.cert},
 			{Name: "raw", Description: "Envia argumentos diretamente para java", Usage: "java raw <java args...>", Run: svc.raw},
 		},
 		Examples: []string{
@@ -44,6 +46,8 @@ func Command(cfg config.Config, run runner.Runner) cli.Command {
 			"java add 17 C:\\Program Files\\Java\\jdk-17",
 			"java use 17 --persist",
 			"java path 21",
+			"java cert C:\\certs\\empresa.crt --alias empresa",
+			"java cert https://example.com/empresa.crt --alias empresa",
 		},
 	}
 }
@@ -162,11 +166,169 @@ func (s service) home(_ cli.Context, args []string) error {
 	return nil
 }
 
+func (s service) cert(_ cli.Context, args []string) error {
+	opts, err := parseCertArgs(args)
+	if err != nil {
+		return err
+	}
+	cert, err := certstore.Import(opts.source)
+	if err != nil {
+		return err
+	}
+	if opts.alias == "" {
+		opts.alias = certificateAlias(cert.Name)
+	}
+
+	javaHome, err := currentJavaHome()
+	if err != nil && opts.cacerts == "" {
+		return err
+	}
+	keytool := "keytool"
+	if javaHome != "" {
+		keytool = filepath.Join(javaHome, "bin", executable("keytool"))
+	}
+	cacerts, err := resolveCACerts(javaHome, opts.cacerts)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Certificado salvo em:", cert.Path)
+	fmt.Println("Importando no truststore:", cacerts)
+	keytoolArgs := []string{
+		"-importcert",
+		"-trustcacerts",
+		"-noprompt",
+		"-alias",
+		opts.alias,
+		"-file",
+		cert.Path,
+		"-keystore",
+		cacerts,
+		"-storepass",
+		opts.storepass,
+	}
+	binary := keytool
+	commandArgs := keytoolArgs
+	options := runner.DefaultOptions()
+	if runtime.GOOS != "windows" && !opts.noSudo && !canWriteFile(cacerts) {
+		fmt.Println("Truststore sem permissao de escrita; usando sudo para executar keytool.")
+		binary = "sudo"
+		commandArgs = append([]string{keytool}, keytoolArgs...)
+		options = runner.InteractiveOptions()
+	}
+	if err := s.runner.Run(binary, commandArgs, options); err != nil {
+		return err
+	}
+	fmt.Println("Certificado importado na JVM com alias:", opts.alias)
+	return nil
+}
+
 func (s service) raw(_ cli.Context, args []string) error {
 	if len(args) == 0 {
 		return cli.UsageError("informe argumentos para java")
 	}
 	return s.runner.Run(s.bin, args, runner.InteractiveOptions())
+}
+
+type certOptions struct {
+	source    string
+	alias     string
+	storepass string
+	cacerts   string
+	noSudo    bool
+}
+
+func parseCertArgs(args []string) (certOptions, error) {
+	opts := certOptions{storepass: "changeit"}
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--alias":
+			if i+1 >= len(args) {
+				return opts, cli.UsageError("--alias precisa de um valor")
+			}
+			opts.alias = args[i+1]
+			i++
+		case "--storepass":
+			if i+1 >= len(args) {
+				return opts, cli.UsageError("--storepass precisa de um valor")
+			}
+			opts.storepass = args[i+1]
+			i++
+		case "--cacerts":
+			if i+1 >= len(args) {
+				return opts, cli.UsageError("--cacerts precisa de um valor")
+			}
+			opts.cacerts = args[i+1]
+			i++
+		case "--no-sudo":
+			opts.noSudo = true
+		default:
+			if opts.source != "" {
+				return opts, cli.UsageError("use: java cert <arquivo|url> [--alias nome] [--storepass senha] [--cacerts caminho] [--no-sudo]")
+			}
+			opts.source = args[i]
+		}
+	}
+	if opts.source == "" {
+		return opts, cli.UsageError("use: java cert <arquivo|url> [--alias nome] [--storepass senha] [--cacerts caminho] [--no-sudo]")
+	}
+	if opts.alias != "" && strings.ContainsAny(opts.alias, " \t\r\n") {
+		return opts, cli.UsageError("--alias nao pode conter espacos")
+	}
+	return opts, nil
+}
+
+func currentJavaHome() (string, error) {
+	settings, err := config.LoadSettings()
+	if err == nil && settings["java.current"] != "" {
+		return settings["java.current"], nil
+	}
+	if home := os.Getenv("JAVA_HOME"); home != "" {
+		return home, nil
+	}
+	return "", fmt.Errorf("JAVA_HOME nao encontrado. Use 'duck java use <alias|java-home>' ou informe --cacerts")
+}
+
+func resolveCACerts(javaHome string, override string) (string, error) {
+	if override != "" {
+		path, err := filepath.Abs(override)
+		if err != nil {
+			return "", err
+		}
+		if _, err := os.Stat(path); err != nil {
+			return "", fmt.Errorf("truststore cacerts nao encontrado em %s", path)
+		}
+		return path, nil
+	}
+	candidates := []string{
+		filepath.Join(javaHome, "lib", "security", "cacerts"),
+		filepath.Join(javaHome, "jre", "lib", "security", "cacerts"),
+	}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("truststore cacerts nao encontrado em %s", strings.Join(candidates, " ou "))
+}
+
+func canWriteFile(path string) bool {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		return false
+	}
+	_ = file.Close()
+	return true
+}
+
+func certificateAlias(name string) string {
+	alias := strings.TrimSuffix(name, filepath.Ext(name))
+	alias = strings.TrimSpace(alias)
+	alias = strings.NewReplacer(" ", "-", "_", "-", ".", "-", ":", "-").Replace(alias)
+	if alias == "" {
+		return "duck-certificate"
+	}
+	return alias
 }
 
 func javaHomes() map[string]string {

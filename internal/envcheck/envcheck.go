@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"duck/internal/cli"
-	"duck/internal/config"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
 )
 
 func Command() cli.Command {

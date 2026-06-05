@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"duck/internal/cli"
+	"github.com/IKauedev/duck/internal/cli"
 )
 
 func CurlCommand() cli.Command {
