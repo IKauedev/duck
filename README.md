@@ -153,6 +153,7 @@ DUCK_DOCKER_COMPOSE_BIN=/caminho/para/docker-compose
 DUCK_KUBECTL_BIN=/caminho/para/kubectl
 DUCK_AWS_BIN=/caminho/para/aws
 DUCK_GO_BIN=/caminho/para/go
+DUCK_GIT_BIN=/caminho/para/git
 DUCK_JAVA_BIN=/caminho/para/java
 DUCK_NODE_BIN=/caminho/para/node
 DUCK_PYTHON_BIN=/caminho/para/python
@@ -181,6 +182,13 @@ duck profile use dev
 duck task add start "docker compose-up -d"
 duck task run start
 duck aliases add dps "docker ps -a"
+duck help search git
+duck palette docker
+duck recent
+duck recent top 15
+duck favorites add deploy "deploy compose --build"
+duck favorites list
+duck favorites run deploy
 duck explain docker ps
 duck last
 duck watch --interval 5 status
@@ -192,6 +200,19 @@ duck troubleshoot api.local 443
 duck monitor --once
 duck alerts
 duck trace api.local 443 https://api.local
+duck perf https://api.local --requests 50
+duck load https://api.local --duration 10 --concurrency 5
+duck ports --listen
+duck kill-port 3000
+duck env example .env .env.example
+duck open local 3000
+duck open swagger 8080
+duck open github
+duck open aws-console ec2
+duck git status
+duck git save "feat: adiciona comando"
+duck git sync
+duck git ship "fix: ajusta README"
 duck password --length 32
 duck password --token 32
 duck encrypt .env.local .env.local.duck --pass minha-senha
@@ -242,11 +263,22 @@ duck python help
 duck env doctor
 duck env export duck-config.json
 duck env import duck-config.json
+duck env example .env .env.example
 duck project detect
 duck curl <url> [--port porta] [--timeout segundos] [--insecure]
 duck port check <host> <port>
 duck kube help
 duck aws help
+```
+
+Flags globais disponiveis em qualquer comando:
+
+```sh
+duck --json <comando>
+duck --quiet <comando>
+duck --no-color <comando>
+duck --timeout 30 <comando>
+duck --yes <comando>
 ```
 
 `duck status` mostra a disponibilidade de Go, Docker, Kubernetes, AWS, Java, Node e Python sem impedir o uso dos demais grupos caso uma ferramenta esteja ausente.
@@ -272,7 +304,38 @@ duck curl https://api.local --insecure
 duck port check localhost 5432
 ```
 
-`duck profile`, `duck task` e `duck aliases` usam o arquivo de configuracao do Duck para salvar perfis, tarefas e atalhos customizados.
+`duck profile`, `duck task`, `duck aliases` e `duck favorites` usam o arquivo de configuracao do Duck para salvar preferencias e atalhos. `duck recent` mostra comandos recentes/mais usados e `duck palette` permite buscar e executar comandos por texto livre.
+
+## Git
+
+```sh
+duck git status
+duck git info
+duck git log -n 20
+duck git diff
+duck git diff --staged
+duck git save "feat: adiciona recurso"
+duck git wip "ajustes locais"
+duck git sync
+duck git publish
+duck git ship "fix: corrige fluxo"
+duck git branches
+duck git new feature/minha-branch
+duck git switch main
+duck git cleanup
+duck git stash save "pausando trabalho"
+duck git stash list
+duck git stash pop
+duck git tag v1.2.3 "Release v1.2.3"
+duck git undo unstage
+duck git undo last
+duck git ignore ".env.local"
+duck git remote
+duck git root
+duck git raw status
+```
+
+`duck git save` faz `add -A` e commit em um comando. `duck git sync` faz `pull --rebase` e `push`. `duck git ship` combina commit, rebase e push para fluxos simples. `duck git cleanup` remove apenas branches locais ja mergeadas e preserva branches comuns como `main`, `master`, `develop`, `staging` e `production`.
 
 ## Utilitarios Locais
 
@@ -283,6 +346,16 @@ duck encrypt <arquivo> [saida] --pass <senha>
 duck decrypt <arquivo> [saida] --pass <senha>
 duck qr <texto|url>
 duck serve [pasta] [--port porta] [--host host]
+duck perf <url> [--requests N]
+duck load <url> [--duration segundos] [--concurrency N]
+duck ports [--listen]
+duck kill-port <porta>
+duck open <url>
+duck open local [porta]
+duck open swagger [porta]
+duck open github
+duck open aws-console [servico]
+duck open ingress [host]
 duck zip <saida.zip> <arquivo|pasta...>
 duck unzip <arquivo.zip> [destino]
 duck find [--path pasta] [--ext extensao] [--size +100MB|-10MB] [termo]
@@ -298,7 +371,7 @@ duck yaml format [arquivo]
 duck yaml validate [arquivo]
 ```
 
-`duck zip` e `duck unzip` compactam e descompactam arquivos/pastas diretamente em Go, sem depender de ferramentas externas do sistema. `duck find` busca arquivos por nome, extensao e tamanho; `duck search` e um alias do mesmo comando. `duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
+`duck perf` mede latencia HTTP com min/media/p95/p99 e throughput. `duck load` executa carga HTTP basica com concorrencia. `duck ports` lista portas locais e PIDs; `duck kill-port` finaliza o processo preso em uma porta. `duck open` abre recursos uteis no navegador. `duck zip` e `duck unzip` compactam e descompactam arquivos/pastas diretamente em Go, sem depender de ferramentas externas do sistema. `duck find` busca arquivos por nome, extensao e tamanho; `duck search` e um alias do mesmo comando. `duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
 
 ## Operacoes Inteligentes
 
@@ -572,13 +645,14 @@ duck python raw -m pip install -r requirements.txt
 duck env doctor
 duck env export duck-config.json
 duck env import duck-config.json
+duck env example .env .env.example
 duck project detect
 duck project doctor
 duck project up
 duck project down
 ```
 
-`duck env doctor` valida `PATH`, `JAVA_HOME`, `NODE_HOME` e binarios comuns. `duck env export/import` facilita levar perfis, tasks, aliases e preferencias do Duck para outra maquina. `duck project detect` identifica stacks pelo projeto atual, como Go, Node.js, Python, Java, Docker, Compose, Kubernetes, Helm e Terraform.
+`duck env doctor` valida `PATH`, `JAVA_HOME`, `NODE_HOME` e binarios comuns. `duck env export/import` facilita levar perfis, tasks, aliases e preferencias do Duck para outra maquina. `duck env example` gera `.env.example` preservando chaves e removendo valores reais. `duck project detect` identifica stacks pelo projeto atual, como Go, Node.js, Python, Java, Docker, Compose, Kubernetes, Helm e Terraform.
 
 ## Build Tools
 

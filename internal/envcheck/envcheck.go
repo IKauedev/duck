@@ -1,11 +1,13 @@
 package envcheck
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/IKauedev/duck/internal/cli"
 	"github.com/IKauedev/duck/internal/config"
@@ -20,6 +22,7 @@ func Command() cli.Command {
 			{Name: "doctor", Description: "Valida PATH, JAVA_HOME e NODE_HOME", Usage: "env doctor", Run: doctor},
 			{Name: "export", Description: "Exporta configuracao do Duck", Usage: "env export <arquivo>", Run: exportSettings},
 			{Name: "import", Description: "Importa configuracao do Duck", Usage: "env import <arquivo>", Run: importSettings},
+			{Name: "example", Description: "Gera .env.example removendo valores sensiveis", Usage: "env example [entrada] [saida]", Run: exampleEnv},
 		},
 	}
 }
@@ -122,4 +125,70 @@ func importSettings(_ cli.Context, args []string) error {
 	}
 	fmt.Println("Configuracao importada.")
 	return nil
+}
+
+func exampleEnv(_ cli.Context, args []string) error {
+	input := ".env"
+	output := ".env.example"
+	switch len(args) {
+	case 0:
+	case 1:
+		input = args[0]
+	case 2:
+		input = args[0]
+		output = args[1]
+	default:
+		return cli.UsageError("use: env example [entrada] [saida]")
+	}
+	file, err := os.Open(filepath.Clean(input))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	var lines []string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			lines = append(lines, line)
+			continue
+		}
+		prefix := ""
+		if strings.HasPrefix(trimmed, "export ") {
+			prefix = "export "
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "export "))
+		}
+		key, _, ok := strings.Cut(trimmed, "=")
+		if !ok {
+			lines = append(lines, line)
+			continue
+		}
+		key = strings.TrimSpace(key)
+		lines = append(lines, prefix+key+"="+placeholderForEnv(key))
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	content := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(filepath.Clean(output), []byte(content), 0644); err != nil {
+		return err
+	}
+	fmt.Println("Gerado:", output)
+	return nil
+}
+
+func placeholderForEnv(key string) string {
+	upper := strings.ToUpper(key)
+	if strings.Contains(upper, "PORT") {
+		return "8080"
+	}
+	if strings.Contains(upper, "HOST") {
+		return "localhost"
+	}
+	if strings.Contains(upper, "URL") {
+		return "http://localhost:8080"
+	}
+	return ""
 }

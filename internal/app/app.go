@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/IKauedev/duck/internal/config"
 	"github.com/IKauedev/duck/internal/docker"
 	"github.com/IKauedev/duck/internal/envcheck"
+	"github.com/IKauedev/duck/internal/gittools"
 	"github.com/IKauedev/duck/internal/golang"
 	"github.com/IKauedev/duck/internal/history"
 	"github.com/IKauedev/duck/internal/install"
@@ -76,6 +78,9 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		{Name: "aliases", Description: "Gerencia aliases customizados", Usage: "aliases <add|list|remove>", Run: aliasesCommand},
 		{Name: "explain", Description: "Mostra expansao de comando Duck", Usage: "explain <comando...>", Run: explainCommand},
 		{Name: "last", Description: "Repete o ultimo comando do historico", Usage: "last", Run: lastCommand},
+		{Name: "recent", Description: "Mostra e executa comandos recentes", Usage: "recent [run N|top N]", Run: recentCommand},
+		{Name: "favorites", Description: "Gerencia comandos favoritos", Usage: "favorites <add|run|list|remove>", Run: favoritesCommand},
+		{Name: "palette", Aliases: []string{"command-palette"}, Description: "Busca e executa comandos por texto livre", Usage: "palette [termo]", Run: paletteCommand},
 		{Name: "watch", Description: "Executa comando em loop", Usage: "watch [--interval segundos] <comando...>", Run: watchCommand},
 		ops.DashboardCommand(cfg, run),
 		ops.LogsCommand(cfg, run),
@@ -93,10 +98,16 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		utils.ZipCommand(),
 		utils.UnzipCommand(),
 		utils.FindCommand(),
+		utils.PerfCommand(),
+		utils.LoadCommand(),
+		utils.PortsCommand(),
+		utils.KillPortCommand(),
+		utils.OpenCommand(),
 		utils.CIDRCommand(),
 		utils.CalcCommand(),
 		utils.JSONCommand(),
 		utils.YAMLCommand(),
+		gittools.Command(cfg, run),
 		{
 			Name:        "status",
 			Description: "Mostra status das ferramentas usadas pelo Duck",
@@ -432,6 +443,201 @@ func lastCommand(_ cli.Context, args []string) error {
 		return err
 	}
 	return runInline(parsed)
+}
+
+func recentCommand(_ cli.Context, args []string) error {
+	entries, err := history.List()
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		fmt.Println("Nenhum comando no historico.")
+		return nil
+	}
+	switch {
+	case len(args) == 0:
+		start := 0
+		if len(entries) > 10 {
+			start = len(entries) - 10
+		}
+		for i, entry := range entries[start:] {
+			fmt.Printf("%4d  %s  duck %s\n", start+i+1, entry.Time, entry.Command)
+		}
+		return nil
+	case len(args) == 2 && args[0] == "run":
+		return historyRun(args[1])
+	case len(args) == 2 && args[0] == "top":
+		limit, err := strconv.Atoi(args[1])
+		if err != nil || limit <= 0 {
+			return cli.UsageError("use: recent top <N>")
+		}
+		counts := map[string]int{}
+		for _, entry := range entries {
+			counts[entry.Command]++
+		}
+		type item struct {
+			command string
+			count   int
+		}
+		items := make([]item, 0, len(counts))
+		for command, count := range counts {
+			items = append(items, item{command: command, count: count})
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].count > items[j].count })
+		if limit > len(items) {
+			limit = len(items)
+		}
+		for i := 0; i < limit; i++ {
+			fmt.Printf("%4d  (%d) duck %s\n", i+1, items[i].count, items[i].command)
+		}
+		return nil
+	default:
+		return cli.UsageError("use: recent [run N|top N]")
+	}
+}
+
+func favoritesCommand(_ cli.Context, args []string) error {
+	if len(args) == 0 {
+		args = []string{"list"}
+	}
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			return cli.UsageError("use: favorites add <nome> <comando...>")
+		}
+		return config.SetSetting("favorite."+args[1], strings.Join(args[2:], " "))
+	case "run":
+		if len(args) != 2 {
+			return cli.UsageError("use: favorites run <nome>")
+		}
+		settings, err := config.LoadSettings()
+		if err != nil {
+			return err
+		}
+		command := settings["favorite."+args[1]]
+		if command == "" {
+			return cli.UsageError("favorito nao encontrado: " + args[1])
+		}
+		parsed, err := parseTerminalLine(command)
+		if err != nil {
+			return err
+		}
+		return runInline(parsed)
+	case "list":
+		return showPrefix("favorite.")
+	case "remove":
+		if len(args) != 2 {
+			return cli.UsageError("use: favorites remove <nome>")
+		}
+		return removeKey("favorite." + args[1])
+	default:
+		return cli.UsageError("subcomando invalido para favorites: " + args[0])
+	}
+}
+
+func paletteCommand(_ cli.Context, args []string) error {
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		fmt.Print("Buscar comando: ")
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		query = strings.TrimSpace(line)
+	}
+	if query == "" {
+		return cli.UsageError("informe um termo para buscar")
+	}
+	candidates := commandCatalog(Commands(config.Load(), runner.New()))
+	type match struct {
+		path  string
+		score int
+	}
+	matches := make([]match, 0)
+	lowerQuery := strings.ToLower(query)
+	for _, candidate := range candidates {
+		score := scoreMatch(lowerQuery, strings.ToLower(candidate))
+		if score > 0 {
+			matches = append(matches, match{path: candidate, score: score})
+		}
+	}
+	if len(matches) == 0 {
+		fmt.Println("Nenhum comando encontrado para:", query)
+		return nil
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].score > matches[j].score })
+	limit := 10
+	if len(matches) < limit {
+		limit = len(matches)
+	}
+	fmt.Println("Resultados:")
+	for i := 0; i < limit; i++ {
+		fmt.Printf("  %d) duck %s\n", i+1, matches[i].path)
+	}
+	fmt.Print("Escolha um numero para executar (enter cancela): ")
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		fmt.Println("Cancelado.")
+		return nil
+	}
+	index, err := strconv.Atoi(line)
+	if err != nil || index <= 0 || index > limit {
+		return cli.UsageError("indice invalido")
+	}
+	parsed, err := parseTerminalLine(matches[index-1].path)
+	if err != nil {
+		return err
+	}
+	return runInline(parsed)
+}
+
+func commandCatalog(commands []cli.Command) []string {
+	out := make([]string, 0)
+	var walk func([]cli.Command, []string)
+	walk = func(items []cli.Command, prefix []string) {
+		for _, item := range items {
+			current := append(prefix, item.Name)
+			if len(item.Children) == 0 {
+				out = append(out, strings.Join(current, " "))
+				continue
+			}
+			walk(item.Children, current)
+		}
+	}
+	walk(commands, nil)
+	return out
+}
+
+func scoreMatch(query, candidate string) int {
+	if query == candidate {
+		return 100
+	}
+	if strings.HasPrefix(candidate, query) {
+		return 50
+	}
+	if strings.Contains(candidate, query) {
+		return 20
+	}
+	score := 0
+	cursor := 0
+	for _, char := range query {
+		pos := strings.IndexRune(candidate[cursor:], char)
+		if pos < 0 {
+			continue
+		}
+		score++
+		cursor += pos + 1
+		if cursor >= len(candidate) {
+			break
+		}
+	}
+	return score
 }
 
 func watchCommand(_ cli.Context, args []string) error {
@@ -848,7 +1054,7 @@ _arguments "1: :(%s)"
 }
 
 func completionWords() string {
-	return "init config status doctor version update completion autocomplete history terminal console repl tui profile task aliases explain last watch dashboard logs troubleshoot deploy monitor alerts trace logs-search encrypt decrypt password qr serve zip unzip find search cidr calc json yaml install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host"
+	return "init config status doctor version update completion autocomplete help history terminal console repl tui profile task aliases explain last recent favorites palette command-palette watch dashboard logs troubleshoot deploy monitor alerts trace logs-search perf load ports kill-port open encrypt decrypt password qr serve zip unzip find search cidr calc json yaml git g install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import example format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host duration concurrency listen requests local swagger github aws-console save wip sync publish ship branches branch new switch co cleanup stash tag undo ignore remote root staged unstage run top search yes force timeout quiet no-color json"
 }
 
 func installCompletion(shell string) error {
@@ -957,6 +1163,7 @@ type toolStatus struct {
 func toolStatuses(cfg config.Config, run runner.Runner) []toolStatus {
 	statuses := []toolStatus{
 		checkToolStatus("Go", cfg.GoBin, []string{"version"}, "Instale Go 1.22+ ou ajuste DUCK_GO_BIN.", run),
+		checkToolStatus("Git", cfg.GitBin, []string{"--version"}, "Instale Git ou ajuste DUCK_GIT_BIN.", run),
 		checkToolStatus("Docker", cfg.DockerBin, []string{"version", "--format", "{{.Client.Version}}"}, "Instale/abra Docker ou ajuste DUCK_DOCKER_BIN.", run),
 		checkToolStatus("Kubernetes", cfg.KubectlBin, []string{"config", "current-context"}, "Instale kubectl ou configure KUBECONFIG/DUCK_KUBECTL_BIN.", run),
 		checkToolStatus("AWS", cfg.AWSBin, []string{"--version"}, "Instale AWS CLI v2 ou ajuste DUCK_AWS_BIN.", run),
