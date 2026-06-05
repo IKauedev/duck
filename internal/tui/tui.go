@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/IKauedev/duck/internal/cli"
 	"github.com/IKauedev/duck/internal/config"
 	"github.com/IKauedev/duck/internal/runner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type tab struct {
