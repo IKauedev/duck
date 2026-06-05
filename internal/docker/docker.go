@@ -2,7 +2,10 @@ package docker
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"duck/internal/cli"
 	"duck/internal/config"
@@ -49,6 +52,20 @@ func (s service) commands() []cli.Command {
 	return []cli.Command{
 		{Name: "status", Description: "Mostra Docker e status de containers", Usage: "docker status [container...]", Run: s.status},
 		{Name: "ps", Aliases: []string{"containers"}, Description: "Lista containers", Usage: "docker ps [-a|--all]", Run: s.ps},
+		{Name: "find", Description: "Busca containers e imagens por nome", Usage: "docker find <termo>", Run: s.find},
+		{Name: "stats", Description: "Mostra uso de recursos dos containers", Usage: "docker stats [container...]", Run: s.stats},
+		{Name: "ports", Description: "Mostra portas publicadas de um container", Usage: "docker ports <container>", Run: s.ports},
+		{Name: "inspect", Description: "Mostra resumo de um container", Usage: "docker inspect <container>", Run: s.inspectSummary},
+		{Name: "health", Description: "Mostra healthcheck dos containers", Usage: "docker health [container...]", Run: s.health},
+		{Name: "wait-healthy", Description: "Aguarda container ficar healthy", Usage: "docker wait-healthy <container> [--timeout segundos]", Run: s.waitHealthy},
+		{Name: "cp-from", Description: "Copia arquivo do container para host", Usage: "docker cp-from <container> <origem> <destino>", Run: s.copyFrom},
+		{Name: "cp-to", Description: "Copia arquivo do host para container", Usage: "docker cp-to <container> <origem> <destino>", Run: s.copyTo},
+		{Name: "size", Description: "Lista uso de disco de containers e imagens", Usage: "docker size", Run: s.size},
+		{Name: "open", Description: "Abre shell no container detectando bash/sh", Usage: "docker open <container>", Run: s.openShell},
+		{Name: "env", Description: "Lista variaveis de ambiente do container", Usage: "docker env <container>", Run: s.containerEnv},
+		{Name: "top", Description: "Lista processos do container", Usage: "docker top <container>", Run: s.containerTop},
+		{Name: "backup-volume", Description: "Faz backup de volume para tar.gz", Usage: "docker backup-volume <volume> <arquivo.tar.gz>", Run: s.backupVolume},
+		{Name: "restore-volume", Description: "Restaura volume a partir de tar.gz", Usage: "docker restore-volume <volume> <arquivo.tar.gz>", Run: s.restoreVolume},
 		{Name: "images", Aliases: []string{"imgs"}, Description: "Lista imagens", Usage: "docker images", Run: s.noExtra("images")},
 		{Name: "volumes", Aliases: []string{"vols"}, Description: "Lista volumes", Usage: "docker volumes", Run: s.noExtra("volume", "ls")},
 		{Name: "networks", Aliases: []string{"nets"}, Description: "Lista redes", Usage: "docker networks", Run: s.noExtra("network", "ls")},
@@ -61,12 +78,15 @@ func (s service) commands() []cli.Command {
 		{Name: "rm", Aliases: []string{"remove"}, Description: "Remove containers", Usage: "docker rm [-f|--force] <container...>", Run: s.removeContainers},
 		{Name: "rm-all", Aliases: []string{"remove-all"}, Description: "Remove todos os containers", Usage: "docker rm-all [-f|--force]", Run: s.removeAllContainers},
 		{Name: "clean-all", Aliases: []string{"cleanup", "reset"}, Description: "Limpa todo o ambiente Docker", Usage: "docker clean-all [-f|--force]", Run: s.cleanAll},
+		{Name: "clean-images", Description: "Remove imagens Docker nao usadas", Usage: "docker clean-images [-f|--force]", Run: s.cleanImages},
+		{Name: "clean-volumes", Description: "Remove volumes Docker nao usados", Usage: "docker clean-volumes [-f|--force]", Run: s.cleanVolumes},
 		{Name: "rmi", Aliases: []string{"remove-image"}, Description: "Remove imagens", Usage: "docker rmi [-f|--force] <image...>", Run: s.removeImages},
 		{Name: "pull", Description: "Baixa uma imagem", Usage: "docker pull <image>", Run: s.withArgs("pull")},
 		{Name: "run", Description: "Executa docker run", Usage: "docker run <docker run args...>", Run: s.withArgs("run")},
 		{Name: "up", Description: "Sobe servicos do Docker Compose", Usage: "docker up [args...]", Run: s.composeWith("up")},
 		{Name: "down", Description: "Remove servicos do Docker Compose", Usage: "docker down [args...]", Run: s.composeWith("down")},
 		{Name: "compose", Aliases: []string{"c"}, Description: "Executa Docker Compose", Usage: "docker compose <args...>", Run: s.compose},
+		{Name: "compose-find", Description: "Procura arquivo Docker Compose na pasta atual", Usage: "docker compose-find", Run: s.composeFind},
 		{Name: "compose-status", Description: "Mostra status dos servicos do Compose", Usage: "docker compose-status [args...]", Run: s.composeWith("ps")},
 		{Name: "compose-up", Description: "Sobe servicos do Compose", Usage: "docker compose-up [args...]", Run: s.composeWith("up")},
 		{Name: "compose-ps", Description: "Lista servicos do Compose", Usage: "docker compose-ps [args...]", Run: s.composeWith("ps")},
@@ -110,6 +130,170 @@ func (s service) ps(_ cli.Context, args []string) error {
 	}
 
 	return s.run(dockerArgs, runner.DefaultOptions())
+}
+
+func (s service) find(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um termo de busca")
+	}
+
+	term := args[0]
+	fmt.Println("Containers:")
+	if err := s.run([]string{"ps", "-a", "--filter", "name=" + term, "--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}"}, runner.DefaultOptions()); err != nil {
+		return err
+	}
+
+	fmt.Println()
+	fmt.Println("Imagens:")
+	return s.run([]string{"images", "--filter", "reference=*" + term + "*", "--format", "table {{.Repository}}\t{{.Tag}}\t{{.ID}}\t{{.Size}}"}, runner.DefaultOptions())
+}
+
+func (s service) stats(_ cli.Context, args []string) error {
+	dockerArgs := []string{"stats"}
+	dockerArgs = append(dockerArgs, args...)
+	return s.run(dockerArgs, runner.InteractiveOptions())
+}
+
+func (s service) ports(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um container")
+	}
+	return s.run([]string{"port", args[0]}, runner.DefaultOptions())
+}
+
+func (s service) inspectSummary(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um container")
+	}
+	return s.run([]string{"inspect", "--format", "Nome: {{.Name}}\nImagem: {{.Config.Image}}\nStatus: {{.State.Status}}\nRunning: {{.State.Running}}\nStarted: {{.State.StartedAt}}\nIP: {{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}\nPortas: {{json .NetworkSettings.Ports}}", args[0]}, runner.DefaultOptions())
+}
+
+func (s service) health(_ cli.Context, args []string) error {
+	dockerArgs := []string{"inspect", "--format", "{{.Name}} | Status: {{.State.Status}} | Health: {{if .State.Health}}{{.State.Health.Status}}{{else}}n/a{{end}}"}
+	if len(args) == 0 {
+		output, err := s.runner.Output(s.bin, []string{"ps", "-aq"})
+		if err != nil {
+			return err
+		}
+		args = nonEmptyLines(output)
+	}
+	if len(args) == 0 {
+		fmt.Println("Nenhum container encontrado.")
+		return nil
+	}
+	dockerArgs = append(dockerArgs, args...)
+	return s.run(dockerArgs, runner.DefaultOptions())
+}
+
+func (s service) waitHealthy(_ cli.Context, args []string) error {
+	timeout := 60 * time.Second
+	targets := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--timeout":
+			if i+1 >= len(args) {
+				return cli.UsageError("--timeout precisa de um valor")
+			}
+			seconds, err := time.ParseDuration(args[i+1] + "s")
+			if err != nil {
+				return cli.UsageError("--timeout precisa ser numero de segundos")
+			}
+			timeout = seconds
+			i++
+		default:
+			targets = append(targets, args[i])
+		}
+	}
+	if len(targets) != 1 {
+		return cli.UsageError("use: wait-healthy <container> [--timeout segundos]")
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		output, err := s.runner.Output(s.bin, []string{"inspect", "--format", "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}", targets[0]})
+		if err != nil {
+			return err
+		}
+		status := strings.TrimSpace(output)
+		if status == "healthy" || status == "running" {
+			fmt.Println(targets[0], status)
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout aguardando %s ficar healthy, status atual: %s", targets[0], status)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func (s service) copyFrom(_ cli.Context, args []string) error {
+	if len(args) != 3 {
+		return cli.UsageError("use: cp-from <container> <origem> <destino>")
+	}
+	return s.run([]string{"cp", args[0] + ":" + args[1], args[2]}, runner.DefaultOptions())
+}
+
+func (s service) copyTo(_ cli.Context, args []string) error {
+	if len(args) != 3 {
+		return cli.UsageError("use: cp-to <container> <origem> <destino>")
+	}
+	return s.run([]string{"cp", args[1], args[0] + ":" + args[2]}, runner.DefaultOptions())
+}
+
+func (s service) size(_ cli.Context, args []string) error {
+	if len(args) > 0 {
+		return cli.UsageError("size nao recebe argumentos")
+	}
+	if err := s.run([]string{"system", "df", "-v"}, runner.DefaultOptions()); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s service) openShell(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um container")
+	}
+	shell := "sh"
+	if _, err := s.runner.Output(s.bin, []string{"exec", args[0], "bash", "-lc", "true"}); err == nil {
+		shell = "bash"
+	}
+	return s.run([]string{"exec", "-it", args[0], shell}, runner.InteractiveOptions())
+}
+
+func (s service) containerEnv(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um container")
+	}
+	return s.run([]string{"exec", args[0], "env"}, runner.DefaultOptions())
+}
+
+func (s service) containerTop(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("informe exatamente um container")
+	}
+	return s.run([]string{"top", args[0]}, runner.DefaultOptions())
+}
+
+func (s service) backupVolume(_ cli.Context, args []string) error {
+	if len(args) != 2 {
+		return cli.UsageError("use: backup-volume <volume> <arquivo.tar.gz>")
+	}
+	archive, err := filepath.Abs(args[1])
+	if err != nil {
+		return err
+	}
+	return s.run([]string{"run", "--rm", "-v", args[0] + ":/volume:ro", "-v", filepath.Dir(archive) + ":/backup", "alpine", "tar", "czf", "/backup/" + filepath.Base(archive), "-C", "/volume", "."}, runner.DefaultOptions())
+}
+
+func (s service) restoreVolume(_ cli.Context, args []string) error {
+	if len(args) != 2 {
+		return cli.UsageError("use: restore-volume <volume> <arquivo.tar.gz>")
+	}
+	archive, err := filepath.Abs(args[1])
+	if err != nil {
+		return err
+	}
+	return s.run([]string{"run", "--rm", "-v", args[0] + ":/volume", "-v", filepath.Dir(archive) + ":/backup", "alpine", "sh", "-c", "cd /volume && tar xzf /backup/" + filepath.Base(archive)}, runner.DefaultOptions())
 }
 
 func (s service) logs(_ cli.Context, args []string) error {
@@ -229,6 +413,46 @@ func (s service) cleanAll(_ cli.Context, args []string) error {
 	return s.run([]string{"system", "prune", "-a", "--volumes", "-f"}, runner.DefaultOptions())
 }
 
+func (s service) cleanImages(_ cli.Context, args []string) error {
+	force, rest := parseForceTargets(args)
+	if len(rest) > 0 {
+		return cli.UsageError("clean-images aceita apenas -f, --force, -y ou --yes")
+	}
+
+	if !force {
+		ok, err := prompt.Confirm("Remover imagens Docker nao usadas? [s/N] ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Println("Cancelado.")
+			return nil
+		}
+	}
+
+	return s.run([]string{"image", "prune", "-a", "-f"}, runner.DefaultOptions())
+}
+
+func (s service) cleanVolumes(_ cli.Context, args []string) error {
+	force, rest := parseForceTargets(args)
+	if len(rest) > 0 {
+		return cli.UsageError("clean-volumes aceita apenas -f, --force, -y ou --yes")
+	}
+
+	if !force {
+		ok, err := prompt.Confirm("Remover volumes Docker nao usados? [s/N] ")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Println("Cancelado.")
+			return nil
+		}
+	}
+
+	return s.run([]string{"volume", "prune", "-f"}, runner.DefaultOptions())
+}
+
 func (s service) removeAllContainersWithConfirm(force bool, message string) error {
 	output, err := s.runner.Output(s.bin, []string{"ps", "-aq"})
 	if err != nil {
@@ -329,6 +553,20 @@ func (s service) compose(_ cli.Context, args []string) error {
 	return s.runCompose(args, runner.InteractiveOptions())
 }
 
+func (s service) composeFind(_ cli.Context, args []string) error {
+	if len(args) > 0 {
+		return cli.UsageError("compose-find nao recebe argumentos")
+	}
+
+	path, ok := findComposeFile(".")
+	if !ok {
+		return fmt.Errorf("arquivo compose nao encontrado na pasta atual ou em pastas acima")
+	}
+
+	fmt.Println(path)
+	return nil
+}
+
 func (s service) composeWith(command string) func(cli.Context, []string) error {
 	return func(_ cli.Context, args []string) error {
 		composeArgs := append([]string{command}, args...)
@@ -423,4 +661,27 @@ func nonEmptyLines(output string) []string {
 		return nil
 	}
 	return lines
+}
+
+func findComposeFile(start string) (string, bool) {
+	names := []string{"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"}
+	dir, err := filepath.Abs(start)
+	if err != nil {
+		return "", false
+	}
+
+	for {
+		for _, name := range names {
+			path := filepath.Join(dir, name)
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				return path, true
+			}
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
 }
