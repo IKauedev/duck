@@ -5,12 +5,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 type Runner struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+	DryRun bool
 }
 
 type Options struct {
@@ -28,6 +30,12 @@ func New() Runner {
 	}
 }
 
+func NewDryRun() Runner {
+	run := New()
+	run.DryRun = true
+	return run
+}
+
 func (r Runner) Run(binary string, args []string, opts Options) error {
 	if binary == "" {
 		return fmt.Errorf("binario nao informado")
@@ -35,6 +43,11 @@ func (r Runner) Run(binary string, args []string, opts Options) error {
 
 	if _, err := exec.LookPath(binary); err != nil {
 		return fmt.Errorf("%s nao encontrado no PATH; configure o PATH ou a variavel DUCK_*_BIN correspondente", binary)
+	}
+
+	if r.DryRun {
+		fmt.Fprintln(firstWriter(opts.Stdout, r.Stdout), "dry-run:", shellCommand(binary, args))
+		return nil
 	}
 
 	cmd := exec.Command(binary, args...)
@@ -53,6 +66,10 @@ func (r Runner) Output(binary string, args []string) (string, error) {
 
 	if _, err := exec.LookPath(binary); err != nil {
 		return "", fmt.Errorf("%s nao encontrado no PATH; configure o PATH ou a variavel DUCK_*_BIN correspondente", binary)
+	}
+
+	if r.DryRun {
+		return "dry-run: " + shellCommand(binary, args), nil
 	}
 
 	cmd := exec.Command(binary, args...)
@@ -81,4 +98,14 @@ func firstWriter(primary io.Writer, fallback io.Writer) io.Writer {
 		return primary
 	}
 	return fallback
+}
+
+func shellCommand(binary string, args []string) string {
+	parts := append([]string{binary}, args...)
+	for index, part := range parts {
+		if strings.ContainsAny(part, " \t\"'") {
+			parts[index] = fmt.Sprintf("%q", part)
+		}
+	}
+	return strings.Join(parts, " ")
 }
