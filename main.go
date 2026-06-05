@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"duck/internal/app"
+	"github.com/IKauedev/duck/internal/app"
 )
 
 func main() {

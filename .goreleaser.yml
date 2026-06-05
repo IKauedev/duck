@@ -1,0 +1,54 @@
+version: 2
+
+project_name: duck
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: duck
+    main: .
+    binary: duck
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/IKauedev/duck/internal/app.Version={{.Version}}
+      - -X github.com/IKauedev/duck/internal/app.Commit={{.Commit}}
+      - -X github.com/IKauedev/duck/internal/app.Date={{.Date}}
+
+archives:
+  - id: duck
+    builds:
+      - duck
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - docs/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

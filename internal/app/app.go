@@ -13,25 +13,27 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"duck/internal/aws"
-	"duck/internal/buildtools"
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/docker"
-	"duck/internal/envcheck"
-	"duck/internal/golang"
-	"duck/internal/history"
-	"duck/internal/install"
-	"duck/internal/java"
-	"duck/internal/kubernetes"
-	"duck/internal/netcheck"
-	"duck/internal/node"
-	"duck/internal/ops"
-	"duck/internal/project"
-	"duck/internal/python"
-	"duck/internal/runner"
-	"duck/internal/utils"
-	"duck/internal/wsl"
+	"github.com/IKauedev/duck/internal/aws"
+	"github.com/IKauedev/duck/internal/buildtools"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/docker"
+	"github.com/IKauedev/duck/internal/envcheck"
+	"github.com/IKauedev/duck/internal/golang"
+	"github.com/IKauedev/duck/internal/history"
+	"github.com/IKauedev/duck/internal/install"
+	"github.com/IKauedev/duck/internal/java"
+	"github.com/IKauedev/duck/internal/kubernetes"
+	"github.com/IKauedev/duck/internal/netcheck"
+	"github.com/IKauedev/duck/internal/node"
+	"github.com/IKauedev/duck/internal/ops"
+	"github.com/IKauedev/duck/internal/project"
+	"github.com/IKauedev/duck/internal/python"
+	"github.com/IKauedev/duck/internal/runner"
+	"github.com/IKauedev/duck/internal/selfupdate"
+	"github.com/IKauedev/duck/internal/tui"
+	"github.com/IKauedev/duck/internal/utils"
+	"github.com/IKauedev/duck/internal/wsl"
 )
 
 const Name = "duck"
@@ -88,6 +90,9 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		utils.PasswordCommand(),
 		utils.QRCommand(),
 		utils.ServeCommand(),
+		utils.ZipCommand(),
+		utils.UnzipCommand(),
+		utils.FindCommand(),
 		utils.CIDRCommand(),
 		utils.CalcCommand(),
 		utils.JSONCommand(),
@@ -112,7 +117,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		},
 		{
 			Name:        "update",
-			Description: "Atualiza o Duck a partir do projeto atual",
+			Description: "Atualiza o Duck a partir do GitHub Releases",
 			Usage:       "update",
 			Run:         update(cfg, run),
 		},
@@ -136,6 +141,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 			Usage:       "terminal",
 			Run:         terminal(cfg, run),
 		},
+		tui.Command(cfg, run),
 		install.Command(),
 		install.SetupCommand(),
 		wsl.Command(cfg, run),
@@ -567,12 +573,11 @@ func version(_ cli.Context, args []string) error {
 }
 
 func update(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
-	return func(_ cli.Context, args []string) error {
+	return func(ctx cli.Context, args []string) error {
 		if len(args) > 0 {
 			return cli.UsageError("update nao recebe argumentos")
 		}
-		fmt.Println("Atualizando Duck com go install .")
-		return run.Run(cfg.GoBin, []string{"install", "."}, runner.DefaultOptions())
+		return selfupdate.Run(ctx.Stdout, Version)
 	}
 }
 
@@ -843,7 +848,7 @@ _arguments "1: :(%s)"
 }
 
 func completionWords() string {
-	return "init config status doctor version update completion autocomplete history terminal console repl profile task aliases explain last watch dashboard logs troubleshoot deploy monitor alerts trace logs-search encrypt decrypt password qr serve cidr calc json yaml install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import format validate get aws overlap ip ps find stats ports inspect health wait-healthy cp-from cp-to size open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host"
+	return "init config status doctor version update completion autocomplete history terminal console repl tui profile task aliases explain last watch dashboard logs troubleshoot deploy monitor alerts trace logs-search encrypt decrypt password qr serve zip unzip find search cidr calc json yaml install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host"
 }
 
 func installCompletion(shell string) error {

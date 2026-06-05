@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/history"
-	"duck/internal/runner"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/history"
+	"github.com/IKauedev/duck/internal/runner"
 )
 
 type service struct {

@@ -35,7 +35,6 @@ Durante o desenvolvimento:
 
 ```sh
 go run . help
-go run ./cmd/duck help
 ```
 
 Gerar binario no Windows:
@@ -48,6 +47,55 @@ Gerar binario no Linux ou WSL:
 
 ```sh
 go build -o duck .
+```
+
+Releases oficiais sao publicados no GitHub Releases com binarios para Windows, Linux e macOS. Para atualizar um Duck instalado por release:
+
+```sh
+duck update
+```
+
+## Instalar via Terminal
+
+Nao e necessario ter Go instalado para usar o Duck. Baixe o binario do GitHub Releases e execute `duck install`.
+
+Windows PowerShell:
+
+```powershell
+iwr https://github.com/IKauedev/duck/releases/latest/download/duck_windows_amd64.zip -OutFile duck.zip
+Expand-Archive duck.zip -DestinationPath .
+.\duck.exe install
+```
+
+Linux amd64:
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_linux_amd64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+macOS Intel:
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_amd64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+macOS Apple Silicon:
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_arm64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+Depois abra um novo terminal e teste:
+
+```sh
+duck help
+duck update
 ```
 
 ## Instalar e Configurar PATH
@@ -150,6 +198,10 @@ duck encrypt .env.local .env.local.duck --pass minha-senha
 duck decrypt .env.local.duck .env.local --pass minha-senha
 duck qr http://localhost:8080
 duck serve . --port 8080
+duck zip backup.zip ./logs .env
+duck unzip backup.zip ./restore
+duck find --ext pdf relatorio
+duck find --size +100MB
 duck cidr aws 10.0.1.0/24
 duck cidr overlap 10.0.0.0/16 10.0.1.0/24
 duck calc ip 172.31.0.0/20
@@ -172,6 +224,7 @@ duck history [--limit N|--all|--clear|--path]
 duck history search <termo>
 duck history run <numero>
 duck terminal
+duck tui
 duck install
 duck setup path
 duck setup tools docker
@@ -181,6 +234,7 @@ duck setup tools curl
 duck setup tools all
 duck wsl status
 duck docker help
+duck docker pick
 duck go help
 duck java help
 duck node help
@@ -229,6 +283,10 @@ duck encrypt <arquivo> [saida] --pass <senha>
 duck decrypt <arquivo> [saida] --pass <senha>
 duck qr <texto|url>
 duck serve [pasta] [--port porta] [--host host]
+duck zip <saida.zip> <arquivo|pasta...>
+duck unzip <arquivo.zip> [destino]
+duck find [--path pasta] [--ext extensao] [--size +100MB|-10MB] [termo]
+duck search [--path pasta] [--ext extensao] [--size +100MB|-10MB] [termo]
 duck cidr calc <cidr>
 duck cidr aws <cidr>
 duck cidr overlap <cidr1> <cidr2>
@@ -240,7 +298,7 @@ duck yaml format [arquivo]
 duck yaml validate [arquivo]
 ```
 
-`duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
+`duck zip` e `duck unzip` compactam e descompactam arquivos/pastas diretamente em Go, sem depender de ferramentas externas do sistema. `duck find` busca arquivos por nome, extensao e tamanho; `duck search` e um alias do mesmo comando. `duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
 
 ## Operacoes Inteligentes
 
@@ -283,6 +341,14 @@ duck> aws whoami
 duck> exit
 ```
 
+`duck tui` abre uma interface terminal full-screen com abas para Docker, Kubernetes e AWS:
+
+```sh
+duck tui
+```
+
+Use `tab`/`shift+tab` para trocar de aba, `r` para atualizar e `q` para sair.
+
 Para habilitar autocomplete no shell atual, gere o script ou instale diretamente no perfil do usuario:
 
 ```sh
@@ -291,6 +357,8 @@ duck completion install powershell
 duck completion install bash
 duck completion install zsh
 ```
+
+Veja a pagina dedicada em [`docs/completion.md`](docs/completion.md). O caminho recomendado e `duck completion install <bash|zsh|powershell>`.
 
 ## Docker
 
@@ -301,6 +369,9 @@ duck docker status
 duck docker status <container...>
 duck docker ps
 duck docker ps -a
+duck docker pick
+duck docker pick logs
+duck docker pick shell
 duck docker find <termo>
 duck docker stats [container...]
 duck docker ports <container>
@@ -352,6 +423,15 @@ duck docker raw <argumentos diretos do docker>
 ```
 
 No Linux/WSL, os comandos Compose tentam usar `docker compose` primeiro. Se o plugin nao existir, o Duck tenta usar o binario classico `docker-compose`.
+
+`duck docker pick` lista containers em uma interface interativa para escolher o alvo e executar uma acao comum:
+
+```sh
+duck docker pick
+duck docker pick logs
+duck docker pick shell
+duck docker pick restart
+```
 
 Alias curto:
 
@@ -434,12 +514,16 @@ duck java use 17
 duck java use 17 --persist
 duck java path 17
 duck java home
+duck java cert /caminho/para/certificado.crt --alias empresa
+duck java cert https://example.com/certificado.crt --alias empresa
 duck java raw -version
 ```
 
 No Windows, `duck java use <alias|JAVA_HOME> --persist` usa `setx` para persistir `JAVA_HOME` e colocar `%JAVA_HOME%\bin` no `PATH` do usuario. Abra um novo terminal depois.
 
 No Linux/WSL, o mesmo comando adiciona `JAVA_HOME` e `PATH` ao perfil do shell (`.bashrc`, `.zshrc` ou `.profile`).
+
+`duck java cert` copia ou baixa o certificado para a pasta de configuracao do Duck e importa no truststore `cacerts` da JVM atual usando `keytool`. Por padrao a senha do truststore e `changeit`; use `--storepass` ou `--cacerts` quando sua JVM usar outro caminho/senha. No Linux/Unix, se o `cacerts` nao for gravavel pelo usuario, o Duck tenta executar `sudo keytool`; use `--no-sudo` para desativar esse comportamento.
 
 Para salvar um JDK detectado manualmente:
 
@@ -457,10 +541,14 @@ duck node add 20 /caminho/para/node-v20
 duck node use 20
 duck node use 20 --persist
 duck node home
+duck node cert /caminho/para/certificado.pem
+duck node cert https://example.com/certificado.pem
 duck node raw --version
 ```
 
 `duck node use <version>` salva a versao atual do Node no config do Duck. Use `duck node add` para mapear uma versao para uma pasta instalada.
+
+`duck node cert` copia ou baixa o certificado para a pasta de configuracao do Duck e configura `NODE_EXTRA_CA_CERTS` para o usuario. No Windows usa `setx`; no Linux/Unix adiciona a variavel em `.bashrc`, `.zshrc` ou `.profile`. Abra um novo terminal para o Node carregar a variavel persistida.
 
 ## Python
 

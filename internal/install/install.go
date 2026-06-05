@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"duck/internal/cli"
-	"duck/internal/prompt"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/prompt"
 )
 
 const appName = "duck"
