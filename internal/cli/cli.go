@@ -92,16 +92,21 @@ func PrintHelp(ctx Context, commands []Command, topic []string) {
 		return
 	}
 
-	fmt.Fprintln(ctx.Stdout, "Duck e um utilitario de terminal para Docker, Kubernetes, AWS e Go.")
+	fmt.Fprintln(ctx.Stdout, "Duck e um utilitario de terminal para Docker, Kubernetes, AWS, Java e Go.")
 	fmt.Fprintln(ctx.Stdout)
 	fmt.Fprintln(ctx.Stdout, "Uso:")
 	fmt.Fprintf(ctx.Stdout, "  %s <comando> [argumentos]\n\n", ctx.AppName)
 	printGroupedCommandList(ctx, commands)
 	fmt.Fprintln(ctx.Stdout)
 	fmt.Fprintln(ctx.Stdout, "Exemplos:")
+	fmt.Fprintf(ctx.Stdout, "  %s doctor\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s status --json\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s terminal\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s history\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s wsl status\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s docker ps -a\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s go check\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s java current\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s kube pods -n default\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s aws whoami\n", ctx.AppName)
 }

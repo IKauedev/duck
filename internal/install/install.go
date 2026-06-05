@@ -47,6 +47,17 @@ func SetupCommand() cli.Command {
 					"setup path --dir C:\\Users\\voce\\bin",
 				},
 			},
+			{
+				Name:        "tools",
+				Description: "Instala ferramentas externas usadas pelo Duck",
+				Usage:       "setup tools <docker|compose|kubectl|all>",
+				Run:         setupTools,
+				Examples: []string{
+					"setup tools docker",
+					"setup tools kubectl",
+					"setup tools all",
+				},
+			},
 		},
 	}
 }
@@ -122,6 +133,154 @@ func setupPath(_ cli.Context, args []string) error {
 
 	printPathNotice(opts.dir)
 	return nil
+}
+
+func setupTools(_ cli.Context, args []string) error {
+	if len(args) != 1 {
+		return cli.UsageError("use: setup tools <docker|compose|kubectl|curl|all>")
+	}
+
+	targets := []string{args[0]}
+	if args[0] == "all" {
+		targets = []string{"docker", "compose", "kubectl", "curl"}
+	}
+
+	for _, target := range targets {
+		fmt.Println("==>", target)
+		if err := installTool(target); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func installTool(target string) error {
+	switch runtime.GOOS {
+	case "windows":
+		return installWindowsTool(target)
+	case "linux":
+		return installLinuxTool(target)
+	default:
+		return fmt.Errorf("instalacao automatica nao suportada em %s", runtime.GOOS)
+	}
+}
+
+func installWindowsTool(target string) error {
+	if _, err := exec.LookPath("winget"); err != nil {
+		return fmt.Errorf("winget nao encontrado. Instale manualmente %s ou habilite App Installer", target)
+	}
+
+	ids := map[string]string{
+		"docker":  "Docker.DockerDesktop",
+		"compose": "Docker.DockerDesktop",
+		"kubectl": "Kubernetes.kubectl",
+		"curl":    "cURL.cURL",
+	}
+	id, ok := ids[target]
+	if !ok {
+		return cli.UsageError("ferramenta invalida: " + target)
+	}
+	return runInteractive("winget", "install", "--id", id, "-e")
+}
+
+func installLinuxTool(target string) error {
+	if target == "docker" {
+		return installLinuxDocker()
+	}
+	if target == "compose" {
+		return installLinuxCompose()
+	}
+	if target == "kubectl" {
+		return installLinuxKubectl()
+	}
+	if target == "curl" {
+		return installLinuxCurl()
+	}
+	return cli.UsageError("ferramenta invalida: " + target)
+}
+
+func installLinuxDocker() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y docker docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y docker docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm docker docker-compose")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add docker docker-cli-compose")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar Docker")
+}
+
+func installLinuxCompose() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y docker-compose-plugin")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm docker-compose")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add docker-cli-compose")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar Docker Compose")
+}
+
+func installLinuxKubectl() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y kubectl")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y kubernetes-client")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y kubernetes-client")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm kubectl")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add kubectl")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar kubectl")
+}
+
+func installLinuxCurl() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y curl")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y curl")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y curl")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm curl")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add curl")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar curl")
+}
+
+func runInteractive(binary string, args ...string) error {
+	cmd := exec.Command(binary, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 type options struct {
