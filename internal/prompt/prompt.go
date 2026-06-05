@@ -10,6 +10,9 @@ import (
 )
 
 func Confirm(message string) (bool, error) {
+	if os.Getenv("DUCK_FORCE") == "1" {
+		return true, nil
+	}
 	fmt.Print(message)
 	reader := bufio.NewReader(os.Stdin)
 	answer, err := reader.ReadString('\n')
