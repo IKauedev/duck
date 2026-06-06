@@ -149,7 +149,7 @@ func parseKubeServices(output string) ([]kubeRow, error) {
 	var list struct {
 		Items []struct {
 			Metadata kubeMeta `json:"metadata"`
-			Spec struct {
+			Spec     struct {
 				Type      string `json:"type"`
 				ClusterIP string `json:"clusterIP"`
 				Ports     []struct {
@@ -329,10 +329,10 @@ func nodeRoles(name string) string {
 func parseKubeEvents(output string) ([]kubeRow, error) {
 	var list struct {
 		Items []struct {
-			Metadata kubeMeta `json:"metadata"`
-			Type     string   `json:"type"`
-			Reason   string   `json:"reason"`
-			Message  string   `json:"message"`
+			Metadata       kubeMeta `json:"metadata"`
+			Type           string   `json:"type"`
+			Reason         string   `json:"reason"`
+			Message        string   `json:"message"`
 			InvolvedObject struct {
 				Kind      string `json:"kind"`
 				Name      string `json:"name"`
@@ -431,4 +431,3 @@ func maxInt(a, b int) int {
 	}
 	return b
 }
-

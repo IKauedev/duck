@@ -31,8 +31,8 @@ type pendingAction struct {
 }
 
 type model struct {
-	cfg config.Config
-	run runner.Runner
+	cfg  config.Config
+	run  runner.Runner
 	opts Options
 
 	activeView viewKind
@@ -40,15 +40,15 @@ type model struct {
 	width      int
 	height     int
 
-	filter     string
+	filter      string
 	filterInput string
 
-	dockerRows     []dockerRow
-	dockerCursor   int
-	dockerVersion  string
-	dockerShowAll  bool
-	dockerErr      error
-	dockerErrText  string
+	dockerRows    []dockerRow
+	dockerCursor  int
+	dockerVersion string
+	dockerShowAll bool
+	dockerErr     error
+	dockerErrText string
 
 	kubeRows          []kubeRow
 	kubeCursor        int
@@ -75,10 +75,10 @@ type model struct {
 	confirmAction string
 	confirmTarget string
 
-	message       string
-	loading       bool
-	quitting      bool
-	pending       *pendingAction
+	message  string
+	loading  bool
+	quitting bool
+	pending  *pendingAction
 
 	dockerBackend toolBackend
 	kubeBackend   toolBackend

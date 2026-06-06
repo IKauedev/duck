@@ -23,9 +23,9 @@ var (
 			Foreground(lipgloss.Color("245")).
 			Padding(0, 1)
 
-	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	msgStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	helpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	errorStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	msgStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	filterStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("229")).
 			Background(lipgloss.Color("236")).
@@ -41,10 +41,10 @@ var (
 
 	rowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
-	statusGood = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82"))
-	statusWarn = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
-	statusBad  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
-	statusInfo = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	statusGood  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("82"))
+	statusWarn  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+	statusBad   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196"))
+	statusInfo  = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
 	statusMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 
 	confirmStyle = lipgloss.NewStyle().
