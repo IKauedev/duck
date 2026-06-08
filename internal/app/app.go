@@ -35,16 +35,11 @@ import (
 	"github.com/IKauedev/duck/internal/selfupdate"
 	"github.com/IKauedev/duck/internal/tui"
 	"github.com/IKauedev/duck/internal/utils"
+	"github.com/IKauedev/duck/internal/version"
 	"github.com/IKauedev/duck/internal/wsl"
 )
 
 const Name = "duck"
-
-var (
-	Version = "dev"
-	Commit  = "unknown"
-	Date    = "unknown"
-)
 
 func Run(args []string) int {
 	cfg := config.Load()
@@ -124,7 +119,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 			Name:        "version",
 			Description: "Mostra versao do Duck",
 			Usage:       "version",
-			Run:         version,
+			Run:         showVersion,
 		},
 		{
 			Name:        "update",
@@ -196,11 +191,16 @@ func status(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 			return encoder.Encode(statuses)
 		}
 
+		printDuckVersion()
 		for _, status := range statuses {
 			printToolStatus(status)
 		}
 		return nil
 	}
+}
+
+func printDuckVersion() {
+	fmt.Printf("%-12s ok: %s (commit %s, build %s)\n", "Duck", version.Label(), version.Commit, version.Date)
 }
 
 func initDuck(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
@@ -750,6 +750,8 @@ func doctor(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 			return cli.UsageError("doctor nao recebe argumentos")
 		}
 
+		printDuckVersion()
+		fmt.Println()
 		statuses := toolStatuses(cfg, run)
 		allOK := true
 		for _, status := range statuses {
@@ -766,15 +768,11 @@ func doctor(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 	}
 }
 
-func version(_ cli.Context, args []string) error {
+func showVersion(_ cli.Context, args []string) error {
 	if len(args) > 0 {
 		return cli.UsageError("version nao recebe argumentos")
 	}
-	fmt.Println("duck", Version)
-	fmt.Println("commit:", Commit)
-	fmt.Println("build:", Date)
-	fmt.Println("go:", runtime.Version())
-	fmt.Println("os/arch:", runtime.GOOS+"/"+runtime.GOARCH)
+	fmt.Println(version.Details())
 	return nil
 }
 
@@ -783,7 +781,7 @@ func update(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 		if len(args) > 0 {
 			return cli.UsageError("update nao recebe argumentos")
 		}
-		return selfupdate.Run(ctx.Stdout, Version)
+		return selfupdate.Run(ctx.Stdout, version.Label())
 	}
 }
 

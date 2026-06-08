@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/IKauedev/duck/internal/version"
 )
 
 type Command struct {
@@ -119,6 +121,11 @@ func Run(appName string, commands []Command, args []string) int {
 
 	if filteredArgs[0] == "help" || filteredArgs[0] == "-h" || filteredArgs[0] == "--help" {
 		PrintHelp(ctx, commands, filteredArgs[1:])
+		return 0
+	}
+
+	if len(filteredArgs) == 1 && (filteredArgs[0] == "--version" || filteredArgs[0] == "-V") {
+		fmt.Fprintln(ctx.Stdout, version.Details())
 		return 0
 	}
 

@@ -2,5 +2,6 @@ dockutil
 dockutil.exe
 duck
 duck.exe
+bin/
 *.test
 *.out
