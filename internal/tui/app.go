@@ -7,6 +7,7 @@ import (
 
 	"github.com/IKauedev/duck/internal/config"
 	"github.com/IKauedev/duck/internal/runner"
+	"github.com/IKauedev/duck/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -1053,9 +1054,10 @@ func (m model) renderFooter() string {
 	if m.opts.Readonly {
 		extra += " | readonly"
 	}
-	common := platformLabel() + " | tab/1-3 | j/k | r refresh " + fmt.Sprintf("(%s)", m.opts.Refresh) + " | q sai"
+	duckVersion := "duck " + version.Label()
+	common := duckVersion + " | " + platformLabel() + " | tab/1-3 | j/k | r refresh " + fmt.Sprintf("(%s)", m.opts.Refresh) + " | q sai"
 	if m.dockerBackend.viaWSL || m.kubeBackend.viaWSL || m.awsBackend.viaWSL {
-		common = platformLabel() + " via WSL | tab/1-3 | j/k | q sai"
+		common = duckVersion + " | " + platformLabel() + " via WSL | tab/1-3 | j/k | q sai"
 	}
 	return helpStyle.Render(help + " | " + extra + " | " + common)
 }

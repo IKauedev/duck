@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/IKauedev/duck/internal/version"
 	"github.com/charmbracelet/lipgloss"
 )
 
 func (m model) renderCompactSummary() string {
 	var lines []string
 	lines = append(lines, detailTitleStyle.Render("Duck Dashboard"))
+	lines = append(lines, helpStyle.Render(fmt.Sprintf("duck %s | commit %s | build %s", version.Label(), version.Commit, version.Date)))
 	lines = append(lines, "")
 
 	dockerLine := fmt.Sprintf("Docker: %s", m.dockerCountLabel())

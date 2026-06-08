@@ -1,0 +1,27 @@
+{
+  "go.formatTool": "gofmt",
+  "go.lintOnSave": "package",
+  "go.buildOnSave": "off",
+  "go.testOnSave": false,
+  "go.testFlags": ["-v"],
+  "go.toolsManagement.checkForUpdates": "local",
+  "go.delveConfig": {
+    "dlvLoadConfig": {
+      "followPointers": true,
+      "maxVariableRecurse": 2,
+      "maxStringLen": 256,
+      "maxArrayValues": 64,
+      "maxStructFields": -1
+    },
+    "showGlobalVariables": true
+  },
+  "[go]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "files.exclude": {
+    "bin": true
+  }
+}

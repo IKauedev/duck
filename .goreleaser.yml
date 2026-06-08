@@ -21,9 +21,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
-      - -X github.com/IKauedev/duck/internal/app.Version={{.Version}}
-      - -X github.com/IKauedev/duck/internal/app.Commit={{.Commit}}
-      - -X github.com/IKauedev/duck/internal/app.Date={{.Date}}
+      - -X github.com/IKauedev/duck/internal/version.Version={{.Version}}
+      - -X github.com/IKauedev/duck/internal/version.Commit={{.Commit}}
+      - -X github.com/IKauedev/duck/internal/version.Date={{.Date}}
 
 archives:
   - id: duck

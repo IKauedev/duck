@@ -15,6 +15,7 @@ import (
 	"github.com/IKauedev/duck/internal/history"
 	"github.com/IKauedev/duck/internal/runner"
 	"github.com/IKauedev/duck/internal/tui"
+	"github.com/IKauedev/duck/internal/version"
 )
 
 type service struct {
@@ -119,6 +120,7 @@ func (s service) dashboard(_ cli.Context, args []string) error {
 		return tui.Run(s.cfg, s.runner, opts)
 	}
 	fmt.Println("Duck Dashboard")
+	fmt.Printf("duck %s | commit %s | build %s\n", version.Label(), version.Commit, version.Date)
 	fmt.Println()
 	printSection("Projeto")
 	printDetected("Go", "go.mod")

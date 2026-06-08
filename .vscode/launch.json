@@ -1,0 +1,145 @@
+{
+  "version": "0.2.0",
+  "inputs": [
+    {
+      "id": "duckSubcommand",
+      "type": "pickString",
+      "description": "Comando duck para depurar",
+      "options": [
+        "version",
+        "doctor",
+        "tui",
+        "dashboard"
+      ],
+      "default": "version"
+    }
+  ],
+  "configurations": [
+    {
+      "name": "Duck: comando (escolher)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["${input:duckSubcommand}"],
+      "showLog": true,
+      "trace": "log"
+    },
+    {
+      "name": "Duck: custom (edite args)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["version"],
+      "showLog": true
+    },
+    {
+      "name": "Duck: tui",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["tui"],
+      "console": "integratedTerminal",
+      "env": {
+        "DUCK_TUI_REFRESH": "30s"
+      },
+      "showLog": true
+    },
+    {
+      "name": "Duck: tui (readonly)",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["tui", "--readonly"],
+      "console": "integratedTerminal",
+      "env": {
+        "DUCK_TUI_REFRESH": "30s",
+        "DUCK_TUI_READONLY": "true"
+      },
+      "showLog": true
+    },
+    {
+      "name": "Duck: dashboard",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["dashboard"],
+      "console": "integratedTerminal",
+      "showLog": true
+    },
+    {
+      "name": "Duck: doctor",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["doctor"],
+      "showLog": true
+    },
+    {
+      "name": "Duck: docker ps",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["docker", "ps"],
+      "showLog": true
+    },
+    {
+      "name": "Duck: kube pods",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "cwd": "${workspaceFolder}",
+      "args": ["kube", "pods"],
+      "showLog": true
+    },
+    {
+      "name": "Test: arquivo atual",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${fileDirname}",
+      "args": ["-test.v"],
+      "showLog": true
+    },
+    {
+      "name": "Test: internal/tui",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/internal/tui",
+      "args": ["-test.v"],
+      "showLog": true
+    },
+    {
+      "name": "Test: todos os pacotes",
+      "type": "go",
+      "request": "launch",
+      "mode": "test",
+      "program": "${workspaceFolder}/...",
+      "args": ["-test.v"],
+      "showLog": true
+    },
+    {
+      "name": "Attach: processo local",
+      "type": "go",
+      "request": "attach",
+      "mode": "local",
+      "processId": "${command:pickProcess}",
+      "showLog": true
+    }
+  ]
+}

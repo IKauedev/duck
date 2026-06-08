@@ -14,6 +14,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/IKauedev/duck/internal/version"
 )
 
 const latestReleaseURL = "https://api.github.com/repos/IKauedev/duck/releases/latest"
@@ -34,8 +36,8 @@ func Run(stdout io.Writer, currentVersion string) error {
 	if err != nil {
 		return err
 	}
-	if isCurrent(currentVersion, rel.TagName) {
-		fmt.Fprintf(stdout, "Duck ja esta atualizado: %s\n", currentVersion)
+	if version.MatchesTag(rel.TagName) || isCurrent(currentVersion, rel.TagName) {
+		fmt.Fprintf(stdout, "Duck ja esta atualizado: %s\n", version.Label())
 		return nil
 	}
 
