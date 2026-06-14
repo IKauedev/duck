@@ -16,6 +16,7 @@ import (
 
 	"github.com/IKauedev/duck/internal/aws"
 	"github.com/IKauedev/duck/internal/buildtools"
+	certcmd "github.com/IKauedev/duck/internal/cert"
 	"github.com/IKauedev/duck/internal/cli"
 	"github.com/IKauedev/duck/internal/config"
 	"github.com/IKauedev/duck/internal/docker"
@@ -162,6 +163,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		buildtools.PNPM(run),
 		netcheck.CurlCommand(),
 		netcheck.PortCommand(),
+		certcmd.Command(),
 		kubernetes.Command(cfg, run),
 		aws.Command(cfg, run),
 		envcheck.Command(),

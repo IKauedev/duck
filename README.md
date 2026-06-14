@@ -37,6 +37,8 @@ Durante o desenvolvimento:
 go run . help
 ```
 
+Para depurar no Cursor ou VS Code (CLI, TUI, testes e attach com Delve), veja [`docs/debug.md`](docs/debug.md).
+
 Gerar binario no Windows:
 
 ```powershell
@@ -267,6 +269,9 @@ duck env example .env .env.example
 duck project detect
 duck curl <url> [--port porta] [--timeout segundos] [--insecure]
 duck port check <host> <port>
+duck cert fetch <url|host> [--port porta] [--chain] [--timeout segundos] [--dir pasta]
+duck cert import <arquivo|url>
+duck cert dir
 duck kube help
 duck aws help
 ```
@@ -303,6 +308,20 @@ duck curl api.local --port 8080 --timeout 5
 duck curl https://api.local --insecure
 duck port check localhost 5432
 ```
+
+`duck cert fetch` conecta ao servidor HTTPS/TLS, extrai o certificado apresentado no handshake e salva em PEM na pasta de certificados do Duck. Use `duck cert import` para copiar ou baixar um arquivo `.crt`/`.pem` de uma URL; use `duck cert dir` para ver onde os arquivos ficam salvos.
+
+```sh
+duck cert fetch https://example.com
+duck cert fetch api.local --port 8443
+duck cert fetch example.com --chain
+duck cert fetch example.com --dir C:\certs
+duck cert import C:\certs\empresa.crt
+duck cert import https://example.com/ca.crt
+duck cert dir
+```
+
+Os certificados ficam em `%APPDATA%\duck\certificates` no Windows e em `~/.config/duck/certificates` no Linux/macOS/WSL. Depois de buscar ou importar, use `duck java cert` ou `duck node cert` para aplicar o certificado na JVM ou no Node.js.
 
 `duck profile`, `duck task`, `duck aliases` e `duck favorites` usam o arquivo de configuracao do Duck para salvar preferencias e atalhos. `duck recent` mostra comandos recentes/mais usados e `duck palette` permite buscar e executar comandos por texto livre.
 
@@ -575,6 +594,34 @@ go vet ./...
 go test ./...
 ```
 
+## Certificados SSL/TLS
+
+Use `duck cert` para buscar certificados de servidores HTTPS/TLS ou importar arquivos para a pasta de configuracao do Duck:
+
+```sh
+duck cert fetch https://example.com
+duck cert fetch api.empresa.com --port 8443
+duck cert fetch example.com --chain
+duck cert fetch example.com --timeout 20
+duck cert fetch example.com --dir /caminho/customizado
+duck cert import /caminho/para/certificado.crt
+duck cert import https://example.com/ca.crt
+duck cert dir
+```
+
+`duck cert fetch` conecta ao host informado, obtém o certificado apresentado no handshake TLS e salva em PEM. Com `--chain`, salva também a cadeia completa em `{host}-chain.pem`. O Duck usa `InsecureSkipVerify` apenas para capturar o certificado, inclusive quando a cadeia e invalida ou autoassinada.
+
+Fluxo completo para confiar no certificado de um servidor interno:
+
+```sh
+duck cert fetch https://api.empresa.com
+duck cert dir
+duck java cert %APPDATA%\duck\certificates\api.empresa.com.pem --alias api-empresa
+duck node cert %APPDATA%\duck\certificates\api.empresa.com.pem
+```
+
+No Linux/WSL, troque `%APPDATA%\duck\certificates` por `~/.config/duck/certificates`.
+
 ## Java
 
 Use estes comandos para ver e alternar JDKs pelo Duck:
@@ -596,7 +643,7 @@ No Windows, `duck java use <alias|JAVA_HOME> --persist` usa `setx` para persisti
 
 No Linux/WSL, o mesmo comando adiciona `JAVA_HOME` e `PATH` ao perfil do shell (`.bashrc`, `.zshrc` ou `.profile`).
 
-`duck java cert` copia ou baixa o certificado para a pasta de configuracao do Duck e importa no truststore `cacerts` da JVM atual usando `keytool`. Por padrao a senha do truststore e `changeit`; use `--storepass` ou `--cacerts` quando sua JVM usar outro caminho/senha. No Linux/Unix, se o `cacerts` nao for gravavel pelo usuario, o Duck tenta executar `sudo keytool`; use `--no-sudo` para desativar esse comportamento.
+`duck java cert` copia ou baixa o certificado para a pasta de configuracao do Duck e importa no truststore `cacerts` da JVM atual usando `keytool`. Se voce so tem a URL do servidor, use antes `duck cert fetch <url>` para extrair o certificado TLS e depois passe o arquivo `.pem` gerado para `duck java cert`. Por padrao a senha do truststore e `changeit`; use `--storepass` ou `--cacerts` quando sua JVM usar outro caminho/senha. No Linux/Unix, se o `cacerts` nao for gravavel pelo usuario, o Duck tenta executar `sudo keytool`; use `--no-sudo` para desativar esse comportamento.
 
 Para salvar um JDK detectado manualmente:
 
@@ -621,7 +668,7 @@ duck node raw --version
 
 `duck node use <version>` salva a versao atual do Node no config do Duck. Use `duck node add` para mapear uma versao para uma pasta instalada.
 
-`duck node cert` copia ou baixa o certificado para a pasta de configuracao do Duck e configura `NODE_EXTRA_CA_CERTS` para o usuario. No Windows usa `setx`; no Linux/Unix adiciona a variavel em `.bashrc`, `.zshrc` ou `.profile`. Abra um novo terminal para o Node carregar a variavel persistida.
+`duck node cert` copia ou baixa o certificado para a pasta de configuracao do Duck e configura `NODE_EXTRA_CA_CERTS` para o usuario. Se voce so tem a URL do servidor, use antes `duck cert fetch <url>` para extrair o certificado TLS. No Windows usa `setx`; no Linux/Unix adiciona a variavel em `.bashrc`, `.zshrc` ou `.profile`. Abra um novo terminal para o Node carregar a variavel persistida.
 
 ## Python
 
