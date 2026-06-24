@@ -24,18 +24,18 @@ func catalog() []definition {
 func findTemplate(id string) (definition, bool) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	aliases := map[string]string{
-		"dockerfile": "docker",
-		"compose":    "compose",
+		"dockerfile":     "docker",
+		"compose":        "compose",
 		"docker-compose": "compose",
-		"tf":         "terraform",
-		"infra":      "terraform",
-		"ci":         "jenkins",
-		"pipeline":   "jenkins",
-		"h":          "helm",
-		"chart":      "helm",
-		"k8s":        "kubernetes",
-		"kube":       "kubernetes",
-		"golang":     "go",
+		"tf":             "terraform",
+		"infra":          "terraform",
+		"ci":             "jenkins",
+		"pipeline":       "jenkins",
+		"h":              "helm",
+		"chart":          "helm",
+		"k8s":            "kubernetes",
+		"kube":           "kubernetes",
+		"golang":         "go",
 	}
 	if mapped, ok := aliases[id]; ok {
 		id = mapped
@@ -473,8 +473,8 @@ func goTemplate() definition {
 
 go 1.22
 `,
-			"main.go": goMainContent,
-			"Dockerfile": dockerfileContent,
+			"main.go":       goMainContent,
+			"Dockerfile":    dockerfileContent,
 			".dockerignore": dockerignoreContent,
 			"README.md": `# {{ProjectName}}
 
@@ -548,4 +548,3 @@ EXPOSE 8080
 ENV ADDR=:8080
 CMD ["/app/app"]
 `
-
