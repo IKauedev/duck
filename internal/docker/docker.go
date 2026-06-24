@@ -85,6 +85,7 @@ func (s service) commands() []cli.Command {
 		{Name: "clean-volumes", Description: "Remove volumes Docker nao usados", Usage: "docker clean-volumes [-f|--force]", Run: s.cleanVolumes},
 		{Name: "rmi", Aliases: []string{"remove-image"}, Description: "Remove imagens", Usage: "docker rmi [-f|--force] <image...>", Run: s.removeImages},
 		{Name: "pull", Description: "Baixa uma imagem", Usage: "docker pull <image>", Run: s.withArgs("pull")},
+		{Name: "build", Description: "Constroi uma imagem a partir de Dockerfile", Usage: "docker build <docker build args...>", Run: s.withArgs("build")},
 		{Name: "run", Description: "Executa docker run", Usage: "docker run <docker run args...>", Run: s.withArgs("run")},
 		{Name: "up", Description: "Sobe servicos do Docker Compose", Usage: "docker up [args...]", Run: s.composeWith("up")},
 		{Name: "down", Description: "Remove servicos do Docker Compose", Usage: "docker down [args...]", Run: s.composeWith("down")},

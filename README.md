@@ -59,9 +59,49 @@ duck update
 
 ## Instalar via Terminal
 
-Nao e necessario ter Go instalado para usar o Duck. Baixe o binario do GitHub Releases e execute `duck install`.
+Nao e necessario ter Go instalado para compilar o Duck. Existem varias formas de baixar e instalar:
 
-Windows PowerShell:
+### 1. Comando integrado (recomendado)
+
+Se voce ja tem qualquer versao do Duck (ou baixou o zip manualmente uma vez):
+
+```sh
+duck download --install
+duck download --install --dir C:\Users\voce\bin
+duck download --urls
+duck update
+```
+
+`duck download --urls` mostra links diretos para download manual (uteis quando a API do GitHub e bloqueada).
+
+### 2. Script CMD no Windows (sem PowerShell)
+
+Ideal para maquinas corporativas onde PowerShell e bloqueado:
+
+```cmd
+git clone https://github.com/IKauedev/duck.git
+cd duck
+scripts\install-windows.cmd
+```
+
+Ou baixe apenas o script e execute no CMD. O instalador usa `curl`, `certutil` ou `bitsadmin` para baixar e `duck install` para configurar o PATH **sem PowerShell**.
+
+### 3. Script shell no Linux/macOS/WSL
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IKauedev/duck/main/scripts/install-linux.sh | sh
+```
+
+Ou:
+
+```sh
+git clone https://github.com/IKauedev/duck.git
+cd duck
+chmod +x scripts/install-linux.sh
+./scripts/install-linux.sh
+```
+
+### 4. Download manual (PowerShell)
 
 ```powershell
 iwr https://github.com/IKauedev/duck/releases/latest/download/duck_windows_amd64.zip -OutFile duck.zip
@@ -69,7 +109,15 @@ Expand-Archive duck.zip -DestinationPath .
 .\duck.exe install
 ```
 
-Linux amd64:
+### 5. Download manual (CMD + tar)
+
+```cmd
+curl -fsSL -o duck.zip https://github.com/IKauedev/duck/releases/latest/download/duck_windows_amd64.zip
+tar -xf duck.zip
+duck.exe install
+```
+
+### 6. Download manual (Linux amd64)
 
 ```sh
 curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_linux_amd64.tar.gz -o duck.tar.gz
@@ -77,7 +125,9 @@ tar -xzf duck.tar.gz
 ./duck install
 ```
 
-macOS Intel:
+### 7. Download manual (macOS)
+
+Intel:
 
 ```sh
 curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_amd64.tar.gz -o duck.tar.gz
@@ -85,7 +135,7 @@ tar -xzf duck.tar.gz
 ./duck install
 ```
 
-macOS Apple Silicon:
+Apple Silicon:
 
 ```sh
 curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_arm64.tar.gz -o duck.tar.gz
@@ -124,7 +174,7 @@ No Linux ou WSL:
 
 O comando copia o executavel para a pasta `bin` do usuario e adiciona essa pasta ao `PATH`:
 
-- Windows: `%USERPROFILE%\bin`, atualizando o `Path` do usuario.
+- Windows: `%USERPROFILE%\bin`, atualizando o `Path` do usuario via registro do Windows ou `setx` (sem PowerShell).
 - Linux/WSL: `$HOME/bin`, atualizando `.bashrc`, `.zshrc` ou `.profile` conforme o shell.
 
 Depois abra um novo terminal e teste:
@@ -139,6 +189,8 @@ Outras opcoes:
 duck install --force
 duck install --dir /caminho/customizado
 duck install --no-path
+duck download --install
+duck download --urls
 duck setup path
 duck setup path --dir /caminho/customizado
 ```
@@ -159,6 +211,8 @@ DUCK_GIT_BIN=/caminho/para/git
 DUCK_JAVA_BIN=/caminho/para/java
 DUCK_NODE_BIN=/caminho/para/node
 DUCK_PYTHON_BIN=/caminho/para/python
+DUCK_TERRAFORM_BIN=/caminho/para/terraform
+DUCK_HELM_BIN=/caminho/para/helm
 DUCK_WSL_BIN=/caminho/para/wsl
 ```
 
@@ -247,12 +301,18 @@ duck history [--limit N|--all|--clear|--path]
 duck history search <termo>
 duck history run <numero>
 duck terminal
+duck terminal cmd
+duck terminal powershell
+duck terminal bash
+duck terminal wsl Ubuntu-22.04
 duck tui
 duck install
 duck setup path
 duck setup tools docker
 duck setup tools compose
 duck setup tools kubectl
+duck setup tools terraform
+duck setup tools helm
 duck setup tools curl
 duck setup tools all
 duck wsl status
@@ -274,6 +334,8 @@ duck cert import <arquivo|url>
 duck cert dir
 duck kube help
 duck aws help
+duck terraform help
+duck helm help
 ```
 
 Flags globais disponiveis em qualquer comando:
@@ -294,6 +356,8 @@ duck --yes <comando>
 duck setup tools docker
 duck setup tools compose
 duck setup tools kubectl
+duck setup tools terraform
+duck setup tools helm
 duck setup tools curl
 duck setup tools all
 ```
@@ -426,12 +490,34 @@ duck history --path
 
 `duck terminal` abre um modo interativo para usar o Duck como um terminal personalizado em Windows, Linux ou WSL:
 
+```sh
+duck terminal
+duck terminal cmd
+duck terminal powershell
+duck terminal bash
+duck terminal wsl Ubuntu-22.04
+```
+
+Dentro do terminal Duck (`duck terminal`):
+
 ```text
 duck> status
 duck> docker ps -a
-duck> aws whoami
+duck> terraform plan
+duck> $ dir
+duck> shell wsl
+duck> help
 duck> exit
 ```
+
+Atalhos uteis no terminal Duck:
+
+- `$ comando` ou `@ comando` — executa comando nativo do sistema (CMD no Windows, sh no Linux)
+- `shell cmd|powershell|bash|wsl [distro]` — abre shell nativa e volta ao Duck depois
+- `!N` — repete entrada do historico Duck
+- `cd`, `pwd`, `clear`/`cls`, `help`, `exit`
+
+Aliases: `duck console`, `duck repl`, `duck sh`.
 
 `duck tui` abre uma interface terminal full-screen com abas para Docker, Kubernetes e AWS:
 
@@ -497,6 +583,8 @@ duck docker clean-images [-f|--force]
 duck docker clean-volumes [-f|--force]
 duck docker rmi [-f|--force] <image...>
 duck docker pull <image>
+duck docker build -t minha-imagem .
+duck docker build <argumentos do docker build>
 duck docker run <argumentos do docker run>
 duck docker up [argumentos do docker compose up]
 duck docker down [argumentos do docker compose down]
@@ -697,7 +785,61 @@ duck project detect
 duck project doctor
 duck project up
 duck project down
+duck template list
+duck template new docker api
+duck template new compose web
+duck template new terraform infra
+duck template new jenkins ci
+duck template new helm chart
+duck template new kubernetes app
+duck update --check
+duck setup autoupdate enable
 ```
+
+## Templates de Projeto
+
+Crie projetos prontos pelo terminal, sem copiar arquivos manualmente:
+
+```sh
+duck template list
+duck template new docker api
+duck template new compose web --dir ./web
+duck template new terraform infra
+duck template new jenkins ci
+duck template new helm mychart
+duck template new kubernetes app
+duck template new go service
+```
+
+Templates disponiveis:
+
+| Tipo | Conteudo |
+|------|----------|
+| `docker` | Go + Dockerfile multi-stage |
+| `compose` | Docker Compose + PostgreSQL |
+| `terraform` | VPC AWS basica |
+| `jenkins` | Jenkinsfile + compose local |
+| `helm` | Chart Deployment/Service |
+| `kubernetes` | Manifestos + Kustomize |
+| `go` | API Go com `/health` |
+
+Aliases: `docker-compose` → compose, `tf` → terraform, `ci` → jenkins, `k8s` → kubernetes.
+
+Use `--force` para sobrescrever arquivos existentes.
+
+## Atualizacao automatica
+
+```sh
+duck update --check
+duck update
+duck update --install
+duck setup autoupdate enable
+duck setup autoupdate enable --time 08:30
+duck setup autoupdate status
+duck setup autoupdate disable
+```
+
+No Windows, o autoupdate usa **schtasks** (CMD nativo, sem PowerShell). No Linux/macOS, adiciona entrada no **crontab**.
 
 `duck env doctor` valida `PATH`, `JAVA_HOME`, `NODE_HOME` e binarios comuns. `duck env export/import` facilita levar perfis, tasks, aliases e preferencias do Duck para outra maquina. `duck env example` gera `.env.example` preservando chaves e removendo valores reais. `duck project detect` identifica stacks pelo projeto atual, como Go, Node.js, Python, Java, Docker, Compose, Kubernetes, Helm e Terraform.
 
@@ -837,11 +979,68 @@ duck a logs /aws/lambda/minha-funcao --follow
 
 Os comandos AWS usam a configuracao normal da AWS CLI, incluindo `~/.aws/config`, `~/.aws/credentials`, `AWS_PROFILE`, `AWS_REGION` e flags `--profile`/`--region` quando aceitas pelo atalho.
 
+## Terraform
+
+```sh
+duck terraform version
+duck terraform init
+duck terraform plan
+duck terraform apply
+duck terraform apply -auto-approve
+duck terraform destroy
+duck terraform validate
+duck terraform fmt
+duck terraform output
+duck terraform show
+duck terraform state list
+duck terraform workspace list
+duck terraform import <address> <id>
+duck terraform providers
+duck terraform check
+duck terraform raw <args...>
+```
+
+Alias curto:
+
+```sh
+duck tf init
+duck tf plan
+duck tf apply -auto-approve
+```
+
+`apply` e `destroy` pedem confirmacao, a menos que voce use `-auto-approve` ou a flag global `--yes`.
+
+## Helm
+
+```sh
+duck helm version
+duck helm list
+duck helm list -A
+duck helm status <release>
+duck helm install <release> <chart>
+duck helm upgrade <release> <chart>
+duck helm upgrade --install api ./chart
+duck helm uninstall <release>
+duck helm template <release> <chart>
+duck helm lint <chart>
+duck helm repo list
+duck helm raw <args...>
+```
+
+Alias curto:
+
+```sh
+duck h list -A
+duck h upgrade --install api ./chart
+```
+
 ## Acoes Destrutivas
 
 Comandos destrutivos pedem confirmacao quando usados sem flags de confirmacao:
 
 ```sh
+duck terraform destroy
+duck helm uninstall api
 duck docker rm api
 duck docker rm-all
 duck docker clean-all

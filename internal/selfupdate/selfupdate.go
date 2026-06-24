@@ -1,49 +1,68 @@
 package selfupdate
 
 import (
-	"archive/tar"
-	"archive/zip"
-	"compress/gzip"
-	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
+	"github.com/IKauedev/duck/internal/release"
 	"github.com/IKauedev/duck/internal/version"
 )
 
-const latestReleaseURL = "https://api.github.com/repos/IKauedev/duck/releases/latest"
-
-type release struct {
-	TagName string  `json:"tag_name"`
-	HTMLURL string  `json:"html_url"`
-	Assets  []asset `json:"assets"`
+type CheckResult struct {
+	Current     string
+	Latest      string
+	UpdateReady bool
+	HTMLURL     string
 }
 
-type asset struct {
-	Name               string `json:"name"`
-	BrowserDownloadURL string `json:"browser_download_url"`
+func Check(currentVersion string) (CheckResult, error) {
+	info, err := release.FetchLatest()
+	if err != nil {
+		return CheckResult{}, err
+	}
+	result := CheckResult{
+		Current: currentVersion,
+		Latest:  info.TagName,
+		HTMLURL: info.HTMLURL,
+	}
+	result.UpdateReady = !version.MatchesTag(info.TagName) && !isCurrent(currentVersion, info.TagName)
+	return result, nil
 }
 
 func Run(stdout io.Writer, currentVersion string) error {
-	rel, err := latestRelease()
+	return RunOptions(stdout, currentVersion, Options{})
+}
+
+type Options struct {
+	CheckOnly bool
+	Install   bool
+}
+
+func RunOptions(stdout io.Writer, currentVersion string, opts Options) error {
+	check, err := Check(currentVersion)
 	if err != nil {
 		return err
 	}
-	if version.MatchesTag(rel.TagName) || isCurrent(currentVersion, rel.TagName) {
+	if opts.CheckOnly {
+		if check.UpdateReady {
+			fmt.Fprintf(stdout, "Atualizacao disponivel: %s -> %s\n%s\n", check.Current, check.Latest, check.HTMLURL)
+		} else {
+			fmt.Fprintf(stdout, "Duck ja esta atualizado: %s\n", version.Label())
+		}
+		return nil
+	}
+	if !check.UpdateReady {
 		fmt.Fprintf(stdout, "Duck ja esta atualizado: %s\n", version.Label())
 		return nil
 	}
 
-	selected, ok := selectAsset(rel.Assets)
-	if !ok {
-		return fmt.Errorf("release %s nao tem asset para %s/%s", rel.TagName, runtime.GOOS, runtime.GOARCH)
+	if opts.Install {
+		return installLatest(stdout, check.Latest, check.HTMLURL)
 	}
 
 	tempDir, err := os.MkdirTemp("", "duck-update-*")
@@ -52,12 +71,10 @@ func Run(stdout io.Writer, currentVersion string) error {
 	}
 	defer os.RemoveAll(tempDir)
 
-	archivePath := filepath.Join(tempDir, selected.Name)
-	if err := download(selected.BrowserDownloadURL, archivePath); err != nil {
-		return err
-	}
-
-	binaryPath, err := extractBinary(archivePath, tempDir)
+	result, err := release.DownloadBinary(release.DownloadOptions{
+		Version: check.Latest,
+		DestDir: tempDir,
+	})
 	if err != nil {
 		return err
 	}
@@ -72,41 +89,43 @@ func Run(stdout io.Writer, currentVersion string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		return replaceWindows(stdout, binaryPath, currentExe, rel)
+		return replaceWindows(stdout, result.BinaryPath, currentExe, check.Latest, check.HTMLURL)
 	}
-	if err := replaceCurrent(binaryPath, currentExe); err != nil {
+	if err := replaceCurrent(result.BinaryPath, currentExe); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "Duck atualizado para %s\n%s\n", rel.TagName, rel.HTMLURL)
+	fmt.Fprintf(stdout, "Duck atualizado para %s\n%s\n", check.Latest, check.HTMLURL)
 	return nil
 }
 
-func latestRelease() (release, error) {
-	client := http.Client{Timeout: 30 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, latestReleaseURL, nil)
+func installLatest(stdout io.Writer, tagName, htmlURL string) error {
+	installDir, err := defaultInstallDirForUpdate()
 	if err != nil {
-		return release{}, err
+		return err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "duck-update")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return release{}, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return release{}, fmt.Errorf("GitHub Releases retornou %s", resp.Status)
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		return err
 	}
 
-	var rel release
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return release{}, err
+	result, err := release.DownloadBinary(release.DownloadOptions{
+		Version: tagName,
+		DestDir: installDir,
+	})
+	if err != nil {
+		return err
 	}
-	if rel.TagName == "" {
-		return release{}, fmt.Errorf("release sem tag")
+
+	fmt.Fprintf(stdout, "Duck %s instalado em %s\n%s\n", tagName, result.BinaryPath, htmlURL)
+	fmt.Fprintln(stdout, "Execute: duck install --force --dir", installDir)
+	return nil
+}
+
+func defaultInstallDirForUpdate() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
 	}
-	return rel, nil
+	return filepath.Join(home, "bin"), nil
 }
 
 func isCurrent(currentVersion string, tag string) bool {
@@ -116,146 +135,6 @@ func isCurrent(currentVersion string, tag string) bool {
 	tag = strings.TrimPrefix(tag, "v")
 	currentVersion = strings.TrimPrefix(currentVersion, "v")
 	return currentVersion == tag
-}
-
-func selectAsset(assets []asset) (asset, bool) {
-	osName := runtime.GOOS
-	arch := runtime.GOARCH
-	for _, candidate := range assets {
-		name := strings.ToLower(candidate.Name)
-		if strings.Contains(name, "checksum") {
-			continue
-		}
-		if strings.Contains(name, osName) && strings.Contains(name, arch) {
-			return candidate, true
-		}
-	}
-	return asset{}, false
-}
-
-func download(url string, destination string) error {
-	client := http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Get(url)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("download retornou %s", resp.Status)
-	}
-
-	file, err := os.Create(destination)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	_, err = io.Copy(file, resp.Body)
-	return err
-}
-
-func extractBinary(archivePath string, tempDir string) (string, error) {
-	lower := strings.ToLower(archivePath)
-	switch {
-	case strings.HasSuffix(lower, ".zip"):
-		return extractZipBinary(archivePath, tempDir)
-	case strings.HasSuffix(lower, ".tar.gz"), strings.HasSuffix(lower, ".tgz"):
-		return extractTarGzBinary(archivePath, tempDir)
-	default:
-		target := filepath.Join(tempDir, executableName())
-		if err := copyFile(archivePath, target); err != nil {
-			return "", err
-		}
-		return target, os.Chmod(target, 0755)
-	}
-}
-
-func extractZipBinary(archivePath string, tempDir string) (string, error) {
-	reader, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return "", err
-	}
-	defer reader.Close()
-
-	for _, file := range reader.File {
-		if !isDuckBinary(file.Name) {
-			continue
-		}
-		src, err := file.Open()
-		if err != nil {
-			return "", err
-		}
-		defer src.Close()
-
-		target := filepath.Join(tempDir, executableName())
-		dst, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, file.Mode())
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(dst, src); err != nil {
-			dst.Close()
-			return "", err
-		}
-		if err := dst.Close(); err != nil {
-			return "", err
-		}
-		return target, os.Chmod(target, 0755)
-	}
-	return "", fmt.Errorf("binario duck nao encontrado no zip")
-}
-
-func extractTarGzBinary(archivePath string, tempDir string) (string, error) {
-	file, err := os.Open(archivePath)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
-	gzipReader, err := gzip.NewReader(file)
-	if err != nil {
-		return "", err
-	}
-	defer gzipReader.Close()
-
-	tarReader := tar.NewReader(gzipReader)
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", err
-		}
-		if header.Typeflag != tar.TypeReg || !isDuckBinary(header.Name) {
-			continue
-		}
-
-		target := filepath.Join(tempDir, executableName())
-		dst, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(dst, tarReader); err != nil {
-			dst.Close()
-			return "", err
-		}
-		if err := dst.Close(); err != nil {
-			return "", err
-		}
-		return target, os.Chmod(target, 0755)
-	}
-	return "", fmt.Errorf("binario duck nao encontrado no tar.gz")
-}
-
-func isDuckBinary(name string) bool {
-	base := filepath.Base(name)
-	return base == "duck" || base == "duck.exe"
-}
-
-func executableName() string {
-	if runtime.GOOS == "windows" {
-		return "duck.exe"
-	}
-	return "duck"
 }
 
 func replaceCurrent(newBinary string, currentExe string) error {
@@ -275,14 +154,48 @@ func replaceCurrent(newBinary string, currentExe string) error {
 	return nil
 }
 
-func replaceWindows(stdout io.Writer, newBinary string, currentExe string, rel release) error {
+func replaceWindows(stdout io.Writer, newBinary string, currentExe string, tagName string, htmlURL string) error {
 	staged := currentExe + ".new"
 	if err := copyFile(newBinary, staged); err != nil {
 		return err
 	}
 
+	batchPath := staged + ".cmd"
+	batch := fmt.Sprintf(`@echo off
+:wait
+tasklist /FI "PID eq %d" 2>nul | find "%d" >nul
+if not errorlevel 1 (
+  timeout /t 1 /nobreak >nul
+  goto wait
+)
+if exist "%s.old" del /F /Q "%s.old"
+move /Y "%s" "%s.old"
+move /Y "%s" "%s"
+if exist "%s.old" del /F /Q "%s.old"
+del /F /Q "%%~f0"
+`,
+		os.Getpid(), os.Getpid(),
+		currentExe, currentExe,
+		currentExe, currentExe,
+		staged, currentExe,
+		currentExe, currentExe,
+	)
+	if err := os.WriteFile(batchPath, []byte(batch), 0644); err != nil {
+		return replaceWindowsPowerShell(stdout, staged, currentExe, tagName, htmlURL)
+	}
+
+	cmd := exec.Command("cmd.exe", "/C", batchPath)
+	if err := cmd.Start(); err != nil {
+		return replaceWindowsPowerShell(stdout, staged, currentExe, tagName, htmlURL)
+	}
+
+	fmt.Fprintf(stdout, "Duck %s baixado. A troca sera concluida quando este processo encerrar.\n%s\n", tagName, htmlURL)
+	return nil
+}
+
+func replaceWindowsPowerShell(stdout io.Writer, staged string, currentExe string, tagName string, htmlURL string) error {
 	scriptPath := staged + ".ps1"
-	script := `param([int]$PidToWait, [string]$Source, [string]$Target)
+	script := fmt.Sprintf(`param([int]$PidToWait, [string]$Source, [string]$Target)
 $Backup = "$Target.old"
 Get-Process -Id $PidToWait -ErrorAction SilentlyContinue | Wait-Process
 Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
@@ -290,7 +203,7 @@ Move-Item -LiteralPath $Target -Destination $Backup -Force
 Move-Item -LiteralPath $Source -Destination $Target -Force
 Remove-Item -LiteralPath $Backup -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction SilentlyContinue
-`
+`)
 	if err := os.WriteFile(scriptPath, []byte(script), 0644); err != nil {
 		return err
 	}
@@ -310,9 +223,9 @@ Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force -ErrorAction Silent
 		currentExe,
 	)
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("nao foi possivel concluir a atualizacao no Windows: %w", err)
 	}
-	fmt.Fprintf(stdout, "Duck %s baixado. A troca sera concluida quando este processo encerrar.\n%s\n", rel.TagName, rel.HTMLURL)
+	fmt.Fprintf(stdout, "Duck %s baixado via PowerShell. A troca sera concluida quando este processo encerrar.\n%s\n", tagName, htmlURL)
 	return nil
 }
 

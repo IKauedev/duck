@@ -50,12 +50,24 @@ func SetupCommand() cli.Command {
 			{
 				Name:        "tools",
 				Description: "Instala ferramentas externas usadas pelo Duck",
-				Usage:       "setup tools <docker|compose|kubectl|all>",
+				Usage:       "setup tools <docker|compose|kubectl|terraform|helm|curl|all>",
 				Run:         setupTools,
 				Examples: []string{
 					"setup tools docker",
 					"setup tools kubectl",
 					"setup tools all",
+				},
+			},
+			{
+				Name:        "autoupdate",
+				Description: "Configura atualizacao automatica diaria do Duck",
+				Usage:       "setup autoupdate <enable|disable|status> [--time HH:MM]",
+				Run:         setupAutoupdate,
+				Examples: []string{
+					"setup autoupdate enable",
+					"setup autoupdate enable --time 08:30",
+					"setup autoupdate status",
+					"setup autoupdate disable",
 				},
 			},
 		},
@@ -137,12 +149,12 @@ func setupPath(_ cli.Context, args []string) error {
 
 func setupTools(_ cli.Context, args []string) error {
 	if len(args) != 1 {
-		return cli.UsageError("use: setup tools <docker|compose|kubectl|curl|all>")
+		return cli.UsageError("use: setup tools <docker|compose|kubectl|terraform|helm|curl|all>")
 	}
 
 	targets := []string{args[0]}
 	if args[0] == "all" {
-		targets = []string{"docker", "compose", "kubectl", "curl"}
+		targets = []string{"docker", "compose", "kubectl", "terraform", "helm", "curl"}
 	}
 
 	for _, target := range targets {
@@ -171,10 +183,12 @@ func installWindowsTool(target string) error {
 	}
 
 	ids := map[string]string{
-		"docker":  "Docker.DockerDesktop",
-		"compose": "Docker.DockerDesktop",
-		"kubectl": "Kubernetes.kubectl",
-		"curl":    "cURL.cURL",
+		"docker":    "Docker.DockerDesktop",
+		"compose":   "Docker.DockerDesktop",
+		"kubectl":   "Kubernetes.kubectl",
+		"terraform": "Hashicorp.Terraform",
+		"helm":      "Helm.Helm",
+		"curl":      "cURL.cURL",
 	}
 	id, ok := ids[target]
 	if !ok {
@@ -195,6 +209,12 @@ func installLinuxTool(target string) error {
 	}
 	if target == "curl" {
 		return installLinuxCurl()
+	}
+	if target == "terraform" {
+		return installLinuxTerraform()
+	}
+	if target == "helm" {
+		return installLinuxHelm()
 	}
 	return cli.UsageError("ferramenta invalida: " + target)
 }
@@ -273,6 +293,44 @@ func installLinuxCurl() error {
 		return runInteractive("sh", "-c", "sudo apk add curl")
 	}
 	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar curl")
+}
+
+func installLinuxTerraform() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y terraform")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y terraform")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y terraform")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm terraform")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add terraform")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar terraform")
+}
+
+func installLinuxHelm() error {
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		return runInteractive("sh", "-c", "sudo apt-get update && sudo apt-get install -y helm")
+	}
+	if _, err := exec.LookPath("dnf"); err == nil {
+		return runInteractive("sh", "-c", "sudo dnf install -y helm")
+	}
+	if _, err := exec.LookPath("yum"); err == nil {
+		return runInteractive("sh", "-c", "sudo yum install -y helm")
+	}
+	if _, err := exec.LookPath("pacman"); err == nil {
+		return runInteractive("sh", "-c", "sudo pacman -Sy --noconfirm helm")
+	}
+	if _, err := exec.LookPath("apk"); err == nil {
+		return runInteractive("sh", "-c", "sudo apk add helm")
+	}
+	return fmt.Errorf("gerenciador de pacotes Linux nao reconhecido para instalar helm")
 }
 
 func runInteractive(binary string, args ...string) error {
@@ -431,44 +489,6 @@ func dirInCurrentPath(dir string) bool {
 		}
 	}
 	return false
-}
-
-func ensureWindowsPath(dir string) error {
-	script := `
-$installDir = ` + powershellString(dir) + `
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ([string]::IsNullOrWhiteSpace($userPath)) {
-  $parts = @()
-} else {
-  $parts = $userPath -split ';' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
-}
-$exists = $false
-foreach ($part in $parts) {
-  if ($part.TrimEnd('\') -ieq $installDir.TrimEnd('\')) {
-    $exists = $true
-  }
-}
-if (-not $exists) {
-  if ([string]::IsNullOrWhiteSpace($userPath)) {
-    $newPath = $installDir
-  } else {
-    $newPath = "$userPath;$installDir"
-  }
-  [Environment]::SetEnvironmentVariable('Path', $newPath, 'User')
-}
-`
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("nao foi possivel atualizar o PATH do usuario: %s", strings.TrimSpace(string(output)))
-	}
-
-	prependProcessPath(dir)
-	return nil
-}
-
-func powershellString(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 }
 
 func ensureUnixPath(dir string) error {

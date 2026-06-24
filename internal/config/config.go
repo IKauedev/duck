@@ -13,6 +13,8 @@ type Config struct {
 	NodeBin          string
 	PythonBin        string
 	WSLBin           string
+	TerraformBin     string
+	HelmBin          string
 }
 
 func Load() Config {
@@ -27,6 +29,8 @@ func Load() Config {
 		NodeBin:          envOrDefault("DUCK_NODE_BIN", "node"),
 		PythonBin:        envOrDefault("DUCK_PYTHON_BIN", "python"),
 		WSLBin:           envOrDefault("DUCK_WSL_BIN", "wsl"),
+		TerraformBin:     envOrDefault("DUCK_TERRAFORM_BIN", "terraform"),
+		HelmBin:          envOrDefault("DUCK_HELM_BIN", "helm"),
 	}
 }
 

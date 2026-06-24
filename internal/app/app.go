@@ -23,6 +23,7 @@ import (
 	"github.com/IKauedev/duck/internal/envcheck"
 	"github.com/IKauedev/duck/internal/gittools"
 	"github.com/IKauedev/duck/internal/golang"
+	"github.com/IKauedev/duck/internal/helm"
 	"github.com/IKauedev/duck/internal/history"
 	"github.com/IKauedev/duck/internal/install"
 	"github.com/IKauedev/duck/internal/java"
@@ -34,6 +35,9 @@ import (
 	"github.com/IKauedev/duck/internal/python"
 	"github.com/IKauedev/duck/internal/runner"
 	"github.com/IKauedev/duck/internal/selfupdate"
+	term "github.com/IKauedev/duck/internal/terminal"
+	"github.com/IKauedev/duck/internal/terraform"
+	"github.com/IKauedev/duck/internal/template"
 	"github.com/IKauedev/duck/internal/tui"
 	"github.com/IKauedev/duck/internal/utils"
 	"github.com/IKauedev/duck/internal/version"
@@ -56,6 +60,10 @@ func Run(args []string) int {
 }
 
 func Commands(cfg config.Config, run runner.Runner) []cli.Command {
+	return commandTree(cfg, run)
+}
+
+func commandTree(cfg config.Config, run runner.Runner) []cli.Command {
 	commands := []cli.Command{
 		{
 			Name:        "init",
@@ -125,7 +133,7 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		{
 			Name:        "update",
 			Description: "Atualiza o Duck a partir do GitHub Releases",
-			Usage:       "update",
+			Usage:       "update [--check] [--install]",
 			Run:         update(cfg, run),
 		},
 		{
@@ -141,15 +149,9 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 			Usage:       "history [--limit N|--all|--clear|--path]",
 			Run:         commandHistory,
 		},
-		{
-			Name:        "terminal",
-			Aliases:     []string{"console", "repl"},
-			Description: "Abre um terminal interativo do Duck",
-			Usage:       "terminal",
-			Run:         terminal(cfg, run),
-		},
 		tui.Command(cfg, run),
 		install.Command(),
+		install.DownloadCommand(),
 		install.SetupCommand(),
 		wsl.Command(cfg, run),
 		docker.Command(cfg, run),
@@ -166,10 +168,16 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		certcmd.Command(),
 		kubernetes.Command(cfg, run),
 		aws.Command(cfg, run),
+		terraform.Command(cfg, run),
+		helm.Command(cfg, run),
 		envcheck.Command(),
 		project.Command(),
+		template.Command(),
 	}
 
+	commands = append(commands, term.Command(cfg, run, func() []cli.Command {
+		return commandTree(cfg, run)
+	}))
 	commands = append(commands, docker.LegacyCommands(cfg, run)...)
 	return commands
 }
@@ -381,7 +389,7 @@ func taskCommand(_ cli.Context, args []string) error {
 		if command == "" {
 			return cli.UsageError("task nao encontrada: " + args[1])
 		}
-		parsed, err := parseTerminalLine(command)
+		parsed, err := term.ParseLine(command)
 		if err != nil {
 			return err
 		}
@@ -440,7 +448,7 @@ func lastCommand(_ cli.Context, args []string) error {
 	if len(entries) == 0 {
 		return cli.UsageError("historico vazio")
 	}
-	parsed, err := parseTerminalLine(entries[len(entries)-1].Command)
+	parsed, err := term.ParseLine(entries[len(entries)-1].Command)
 	if err != nil {
 		return err
 	}
@@ -520,7 +528,7 @@ func favoritesCommand(_ cli.Context, args []string) error {
 		if command == "" {
 			return cli.UsageError("favorito nao encontrado: " + args[1])
 		}
-		parsed, err := parseTerminalLine(command)
+		parsed, err := term.ParseLine(command)
 		if err != nil {
 			return err
 		}
@@ -592,7 +600,7 @@ func paletteCommand(_ cli.Context, args []string) error {
 	if err != nil || index <= 0 || index > limit {
 		return cli.UsageError("indice invalido")
 	}
-	parsed, err := parseTerminalLine(matches[index-1].path)
+	parsed, err := term.ParseLine(matches[index-1].path)
 	if err != nil {
 		return err
 	}
@@ -675,7 +683,7 @@ func expandAliasArgs(args []string) []string {
 	if alias == "" {
 		return args
 	}
-	parsed, err := parseTerminalLine(alias)
+	parsed, err := term.ParseLine(alias)
 	if err != nil {
 		return args
 	}
@@ -780,10 +788,18 @@ func showVersion(_ cli.Context, args []string) error {
 
 func update(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
 	return func(ctx cli.Context, args []string) error {
-		if len(args) > 0 {
-			return cli.UsageError("update nao recebe argumentos")
+		opts := selfupdate.Options{}
+		for _, arg := range args {
+			switch arg {
+			case "--check":
+				opts.CheckOnly = true
+			case "--install":
+				opts.Install = true
+			default:
+				return cli.UsageError("opcao invalida para update: " + arg)
+			}
 		}
-		return selfupdate.Run(ctx.Stdout, version.Label())
+		return selfupdate.RunOptions(ctx.Stdout, version.Label(), opts)
 	}
 }
 
@@ -891,104 +907,11 @@ func historyRun(value string) error {
 	if index > len(entries) {
 		return cli.UsageError("entrada de historico nao encontrada")
 	}
-	args, err := parseTerminalLine(entries[index-1].Command)
+	args, err := term.ParseLine(entries[index-1].Command)
 	if err != nil {
 		return err
 	}
 	return runInline(args)
-}
-
-func terminal(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
-	return func(_ cli.Context, args []string) error {
-		if len(args) > 0 {
-			return cli.UsageError("terminal nao recebe argumentos")
-		}
-
-		fmt.Println("Duck terminal. Digite 'help' para ajuda ou 'exit' para sair.")
-		scanner := bufio.NewScanner(os.Stdin)
-		for {
-			fmt.Print(terminalPrompt())
-			if !scanner.Scan() {
-				fmt.Println()
-				return scanner.Err()
-			}
-
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				continue
-			}
-			switch strings.ToLower(line) {
-			case "exit", "quit":
-				return nil
-			case "pwd":
-				wd, err := os.Getwd()
-				if err != nil {
-					fmt.Println("Erro:", err)
-				} else {
-					fmt.Println(wd)
-				}
-				continue
-			case "clear", "cls":
-				fmt.Print("\033[H\033[2J")
-				continue
-			}
-			if strings.HasPrefix(line, "cd ") {
-				dir := strings.TrimSpace(strings.TrimPrefix(line, "cd "))
-				if err := os.Chdir(dir); err != nil {
-					fmt.Println("Erro:", err)
-				}
-				continue
-			}
-			if strings.HasPrefix(line, "!") {
-				if err := historyRun(strings.TrimPrefix(line, "!")); err != nil {
-					fmt.Println("Erro:", err)
-				}
-				continue
-			}
-
-			parsed, err := parseTerminalLine(line)
-			if err != nil {
-				fmt.Println("Erro:", err)
-				continue
-			}
-			if len(parsed) == 0 {
-				continue
-			}
-			if parsed[0] == Name {
-				parsed = parsed[1:]
-			}
-			if len(parsed) == 0 {
-				continue
-			}
-			if parsed[0] == "terminal" || parsed[0] == "console" || parsed[0] == "repl" {
-				fmt.Println("Voce ja esta no terminal Duck.")
-				continue
-			}
-
-			_ = history.Record(parsed)
-			code := cli.Run(Name, Commands(cfg, run), parsed)
-			if code != 0 {
-				fmt.Println("Comando finalizado com erro:", code)
-			}
-		}
-	}
-}
-
-func terminalPrompt() string {
-	settings, _ := config.LoadSettings()
-	awsProfile := settings["aws.profile"]
-	kubeNamespace := settings["kube.namespace"]
-	parts := make([]string, 0, 2)
-	if awsProfile != "" {
-		parts = append(parts, "aws:"+awsProfile)
-	}
-	if kubeNamespace != "" {
-		parts = append(parts, "ns:"+kubeNamespace)
-	}
-	if len(parts) == 0 {
-		return "duck> "
-	}
-	return "duck[" + strings.Join(parts, " ") + "]> "
 }
 
 func runInline(args []string) error {
@@ -1054,7 +977,7 @@ _arguments "1: :(%s)"
 }
 
 func completionWords() string {
-	return "init config status doctor version update completion autocomplete help history terminal console repl tui profile task aliases explain last recent favorites palette command-palette watch dashboard logs troubleshoot deploy monitor alerts trace logs-search perf load ports kill-port open encrypt decrypt password qr serve zip unzip find search cidr calc json yaml git g install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import example format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host duration concurrency listen requests local swagger github aws-console save wip sync publish ship branches branch new switch co cleanup stash tag undo ignore remote root staged unstage run top search yes force timeout quiet no-color json"
+	return "init config status doctor version update download urls template tpl scaffold new create completion autocomplete help history terminal console repl sh tui profile task aliases explain last recent favorites palette command-palette watch dashboard logs troubleshoot deploy monitor alerts trace logs-search perf load ports kill-port open encrypt decrypt password qr serve zip unzip find search cidr calc json yaml git g install setup autoupdate tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a terraform tf helm h check init plan apply destroy workspace import providers cmd bash powershell ps pwsh check export import example format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull build run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host duration concurrency listen requests local swagger github aws-console save wip sync publish ship branches branch new switch co cleanup stash tag undo ignore remote root staged unstage run top search yes force timeout quiet no-color json"
 }
 
 func installCompletion(shell string) error {
@@ -1105,54 +1028,6 @@ func completionProfile(shell string) (string, error) {
 	}
 }
 
-func parseTerminalLine(line string) ([]string, error) {
-	var args []string
-	var current strings.Builder
-	var quote rune
-	escaped := false
-
-	for _, char := range line {
-		if escaped {
-			current.WriteRune(char)
-			escaped = false
-			continue
-		}
-		if char == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if char == quote {
-				quote = 0
-				continue
-			}
-			current.WriteRune(char)
-			continue
-		}
-		switch char {
-		case '\'', '"':
-			quote = char
-		case ' ', '\t':
-			if current.Len() > 0 {
-				args = append(args, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteRune(char)
-		}
-	}
-	if escaped {
-		current.WriteRune('\\')
-	}
-	if quote != 0 {
-		return nil, fmt.Errorf("aspas nao fechadas")
-	}
-	if current.Len() > 0 {
-		args = append(args, current.String())
-	}
-	return args, nil
-}
-
 type toolStatus struct {
 	Name       string `json:"name"`
 	OK         bool   `json:"ok"`
@@ -1170,6 +1045,8 @@ func toolStatuses(cfg config.Config, run runner.Runner) []toolStatus {
 		checkToolStatus("Java", cfg.JavaBin, []string{"-version"}, "Instale Java/JDK ou ajuste DUCK_JAVA_BIN.", run),
 		checkToolStatus("Node", cfg.NodeBin, []string{"--version"}, "Instale Node.js ou ajuste DUCK_NODE_BIN.", run),
 		checkToolStatus("Python", cfg.PythonBin, []string{"--version"}, "Instale Python ou ajuste DUCK_PYTHON_BIN.", run),
+		checkToolStatus("Terraform", cfg.TerraformBin, []string{"version"}, "Instale Terraform ou ajuste DUCK_TERRAFORM_BIN.", run),
+		checkToolStatus("Helm", cfg.HelmBin, []string{"version", "--short"}, "Instale Helm ou ajuste DUCK_HELM_BIN.", run),
 	}
 
 	wslStatus := checkToolStatus("WSL", cfg.WSLBin, []string{"--status"}, "Instale/configure WSL se estiver no Windows.", run)
