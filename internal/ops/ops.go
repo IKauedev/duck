@@ -10,10 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/history"
-	"duck/internal/runner"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/history"
+	"github.com/IKauedev/duck/internal/runner"
+	"github.com/IKauedev/duck/internal/tui"
+	"github.com/IKauedev/duck/internal/version"
 )
 
 type service struct {
@@ -23,7 +25,16 @@ type service struct {
 
 func DashboardCommand(cfg config.Config, run runner.Runner) cli.Command {
 	svc := service{cfg: cfg, runner: run}
-	return cli.Command{Name: "dashboard", Description: "Mostra resumo do ambiente atual", Usage: "dashboard", Run: svc.dashboard}
+	return cli.Command{
+		Name:        "dashboard",
+		Description: "Abre dashboard compacto do Duck (alias de duck tui --compact)",
+		Usage:       "dashboard [--text]",
+		Run:         svc.dashboard,
+		Examples: []string{
+			"dashboard",
+			"dashboard --text",
+		},
+	}
 }
 
 func LogsCommand(cfg config.Config, run runner.Runner) cli.Command {
@@ -94,10 +105,22 @@ func LogsSearchCommand(cfg config.Config, run runner.Runner) cli.Command {
 }
 
 func (s service) dashboard(_ cli.Context, args []string) error {
-	if len(args) > 0 {
-		return cli.UsageError("dashboard nao recebe argumentos")
+	textMode := false
+	for _, arg := range args {
+		switch arg {
+		case "--text":
+			textMode = true
+		default:
+			return cli.UsageError("opcao invalida para dashboard: " + arg)
+		}
+	}
+	if !textMode {
+		opts := tui.DefaultOptions()
+		opts.Compact = true
+		return tui.Run(s.cfg, s.runner, opts)
 	}
 	fmt.Println("Duck Dashboard")
+	fmt.Printf("duck %s | commit %s | build %s\n", version.Label(), version.Commit, version.Date)
 	fmt.Println()
 	printSection("Projeto")
 	printDetected("Go", "go.mod")

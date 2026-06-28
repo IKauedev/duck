@@ -8,30 +8,44 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
 
-	"duck/internal/aws"
-	"duck/internal/buildtools"
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/docker"
-	"duck/internal/envcheck"
-	"duck/internal/golang"
-	"duck/internal/history"
-	"duck/internal/install"
-	"duck/internal/java"
-	"duck/internal/kubernetes"
-	"duck/internal/netcheck"
-	"duck/internal/node"
-	"duck/internal/ops"
-	"duck/internal/project"
-	"duck/internal/python"
-	"duck/internal/runner"
-	"duck/internal/utils"
-	"duck/internal/wsl"
+	"github.com/IKauedev/duck/internal/appinstall"
+	"github.com/IKauedev/duck/internal/aws"
+	"github.com/IKauedev/duck/internal/buildtools"
+	certcmd "github.com/IKauedev/duck/internal/cert"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/docker"
+	"github.com/IKauedev/duck/internal/envcheck"
+	"github.com/IKauedev/duck/internal/gittools"
+	"github.com/IKauedev/duck/internal/gittui"
+	"github.com/IKauedev/duck/internal/golang"
+	"github.com/IKauedev/duck/internal/helm"
+	"github.com/IKauedev/duck/internal/history"
+	"github.com/IKauedev/duck/internal/install"
+	"github.com/IKauedev/duck/internal/java"
+	"github.com/IKauedev/duck/internal/kubernetes"
+	"github.com/IKauedev/duck/internal/mongodb"
+	"github.com/IKauedev/duck/internal/netcheck"
+	"github.com/IKauedev/duck/internal/node"
+	"github.com/IKauedev/duck/internal/ops"
+	"github.com/IKauedev/duck/internal/project"
+	"github.com/IKauedev/duck/internal/python"
+	"github.com/IKauedev/duck/internal/runner"
+	"github.com/IKauedev/duck/internal/selfupdate"
+	"github.com/IKauedev/duck/internal/shelltui"
+	"github.com/IKauedev/duck/internal/template"
+	term "github.com/IKauedev/duck/internal/terminal"
+	"github.com/IKauedev/duck/internal/terraform"
+	"github.com/IKauedev/duck/internal/tui"
+	"github.com/IKauedev/duck/internal/utils"
+	"github.com/IKauedev/duck/internal/version"
+	"github.com/IKauedev/duck/internal/wsl"
 )
 
 const Name = "duck"
@@ -56,6 +70,10 @@ func Run(args []string) int {
 }
 
 func Commands(cfg config.Config, run runner.Runner) []cli.Command {
+	return commandTree(cfg, run)
+}
+
+func commandTree(cfg config.Config, run runner.Runner) []cli.Command {
 	commands := []cli.Command{
 		{
 			Name:        "init",
@@ -74,6 +92,9 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		{Name: "aliases", Description: "Gerencia aliases customizados", Usage: "aliases <add|list|remove>", Run: aliasesCommand},
 		{Name: "explain", Description: "Mostra expansao de comando Duck", Usage: "explain <comando...>", Run: explainCommand},
 		{Name: "last", Description: "Repete o ultimo comando do historico", Usage: "last", Run: lastCommand},
+		{Name: "recent", Description: "Mostra e executa comandos recentes", Usage: "recent [run N|top N]", Run: recentCommand},
+		{Name: "favorites", Description: "Gerencia comandos favoritos", Usage: "favorites <add|run|list|remove>", Run: favoritesCommand},
+		{Name: "palette", Aliases: []string{"command-palette"}, Description: "Busca e executa comandos por texto livre", Usage: "palette [termo]", Run: paletteCommand},
 		{Name: "watch", Description: "Executa comando em loop", Usage: "watch [--interval segundos] <comando...>", Run: watchCommand},
 		ops.DashboardCommand(cfg, run),
 		ops.LogsCommand(cfg, run),
@@ -88,10 +109,19 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		utils.PasswordCommand(),
 		utils.QRCommand(),
 		utils.ServeCommand(),
+		utils.ZipCommand(),
+		utils.UnzipCommand(),
+		utils.FindCommand(),
+		utils.PerfCommand(),
+		utils.LoadCommand(),
+		utils.PortsCommand(),
+		utils.KillPortCommand(),
+		utils.OpenCommand(),
 		utils.CIDRCommand(),
 		utils.CalcCommand(),
 		utils.JSONCommand(),
 		utils.YAMLCommand(),
+		gittools.Command(cfg, run),
 		{
 			Name:        "status",
 			Description: "Mostra status das ferramentas usadas pelo Duck",
@@ -108,12 +138,12 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 			Name:        "version",
 			Description: "Mostra versao do Duck",
 			Usage:       "version",
-			Run:         version,
+			Run:         showVersion,
 		},
 		{
 			Name:        "update",
-			Description: "Atualiza o Duck a partir do projeto atual",
-			Usage:       "update",
+			Description: "Atualiza o Duck a partir do GitHub Releases",
+			Usage:       "update [--check] [--install]",
 			Run:         update(cfg, run),
 		},
 		{
@@ -129,14 +159,9 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 			Usage:       "history [--limit N|--all|--clear|--path]",
 			Run:         commandHistory,
 		},
-		{
-			Name:        "terminal",
-			Aliases:     []string{"console", "repl"},
-			Description: "Abre um terminal interativo do Duck",
-			Usage:       "terminal",
-			Run:         terminal(cfg, run),
-		},
+		tui.Command(cfg, run),
 		install.Command(),
+		install.DownloadCommand(),
 		install.SetupCommand(),
 		wsl.Command(cfg, run),
 		docker.Command(cfg, run),
@@ -150,12 +175,25 @@ func Commands(cfg config.Config, run runner.Runner) []cli.Command {
 		buildtools.PNPM(run),
 		netcheck.CurlCommand(),
 		netcheck.PortCommand(),
+		certcmd.Command(),
 		kubernetes.Command(cfg, run),
 		aws.Command(cfg, run),
+		terraform.Command(cfg, run),
+		helm.Command(cfg, run),
 		envcheck.Command(),
 		project.Command(),
+		template.Command(),
+		mongodb.Command(cfg, run),
+		gittui.Command(),
 	}
 
+	commands = append(commands, term.Command(cfg, run, func() []cli.Command {
+		return commandTree(cfg, run)
+	}))
+	commands = append(commands, shelltui.Command(cfg, run, func() []cli.Command {
+		return commandTree(cfg, run)
+	}))
+	commands = append(commands, appinstall.Command())
 	commands = append(commands, docker.LegacyCommands(cfg, run)...)
 	return commands
 }
@@ -179,11 +217,16 @@ func status(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 			return encoder.Encode(statuses)
 		}
 
+		printDuckVersion()
 		for _, status := range statuses {
 			printToolStatus(status)
 		}
 		return nil
 	}
+}
+
+func printDuckVersion() {
+	fmt.Printf("%-12s ok: %s (commit %s, build %s)\n", "Duck", version.Label(), version.Commit, version.Date)
 }
 
 func initDuck(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
@@ -362,7 +405,7 @@ func taskCommand(_ cli.Context, args []string) error {
 		if command == "" {
 			return cli.UsageError("task nao encontrada: " + args[1])
 		}
-		parsed, err := parseTerminalLine(command)
+		parsed, err := term.ParseLine(command)
 		if err != nil {
 			return err
 		}
@@ -421,11 +464,206 @@ func lastCommand(_ cli.Context, args []string) error {
 	if len(entries) == 0 {
 		return cli.UsageError("historico vazio")
 	}
-	parsed, err := parseTerminalLine(entries[len(entries)-1].Command)
+	parsed, err := term.ParseLine(entries[len(entries)-1].Command)
 	if err != nil {
 		return err
 	}
 	return runInline(parsed)
+}
+
+func recentCommand(_ cli.Context, args []string) error {
+	entries, err := history.List()
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		fmt.Println("Nenhum comando no historico.")
+		return nil
+	}
+	switch {
+	case len(args) == 0:
+		start := 0
+		if len(entries) > 10 {
+			start = len(entries) - 10
+		}
+		for i, entry := range entries[start:] {
+			fmt.Printf("%4d  %s  duck %s\n", start+i+1, entry.Time, entry.Command)
+		}
+		return nil
+	case len(args) == 2 && args[0] == "run":
+		return historyRun(args[1])
+	case len(args) == 2 && args[0] == "top":
+		limit, err := strconv.Atoi(args[1])
+		if err != nil || limit <= 0 {
+			return cli.UsageError("use: recent top <N>")
+		}
+		counts := map[string]int{}
+		for _, entry := range entries {
+			counts[entry.Command]++
+		}
+		type item struct {
+			command string
+			count   int
+		}
+		items := make([]item, 0, len(counts))
+		for command, count := range counts {
+			items = append(items, item{command: command, count: count})
+		}
+		sort.Slice(items, func(i, j int) bool { return items[i].count > items[j].count })
+		if limit > len(items) {
+			limit = len(items)
+		}
+		for i := 0; i < limit; i++ {
+			fmt.Printf("%4d  (%d) duck %s\n", i+1, items[i].count, items[i].command)
+		}
+		return nil
+	default:
+		return cli.UsageError("use: recent [run N|top N]")
+	}
+}
+
+func favoritesCommand(_ cli.Context, args []string) error {
+	if len(args) == 0 {
+		args = []string{"list"}
+	}
+	switch args[0] {
+	case "add":
+		if len(args) < 3 {
+			return cli.UsageError("use: favorites add <nome> <comando...>")
+		}
+		return config.SetSetting("favorite."+args[1], strings.Join(args[2:], " "))
+	case "run":
+		if len(args) != 2 {
+			return cli.UsageError("use: favorites run <nome>")
+		}
+		settings, err := config.LoadSettings()
+		if err != nil {
+			return err
+		}
+		command := settings["favorite."+args[1]]
+		if command == "" {
+			return cli.UsageError("favorito nao encontrado: " + args[1])
+		}
+		parsed, err := term.ParseLine(command)
+		if err != nil {
+			return err
+		}
+		return runInline(parsed)
+	case "list":
+		return showPrefix("favorite.")
+	case "remove":
+		if len(args) != 2 {
+			return cli.UsageError("use: favorites remove <nome>")
+		}
+		return removeKey("favorite." + args[1])
+	default:
+		return cli.UsageError("subcomando invalido para favorites: " + args[0])
+	}
+}
+
+func paletteCommand(_ cli.Context, args []string) error {
+	query := strings.TrimSpace(strings.Join(args, " "))
+	if query == "" {
+		fmt.Print("Buscar comando: ")
+		reader := bufio.NewReader(os.Stdin)
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		query = strings.TrimSpace(line)
+	}
+	if query == "" {
+		return cli.UsageError("informe um termo para buscar")
+	}
+	candidates := commandCatalog(Commands(config.Load(), runner.New()))
+	type match struct {
+		path  string
+		score int
+	}
+	matches := make([]match, 0)
+	lowerQuery := strings.ToLower(query)
+	for _, candidate := range candidates {
+		score := scoreMatch(lowerQuery, strings.ToLower(candidate))
+		if score > 0 {
+			matches = append(matches, match{path: candidate, score: score})
+		}
+	}
+	if len(matches) == 0 {
+		fmt.Println("Nenhum comando encontrado para:", query)
+		return nil
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].score > matches[j].score })
+	limit := 10
+	if len(matches) < limit {
+		limit = len(matches)
+	}
+	fmt.Println("Resultados:")
+	for i := 0; i < limit; i++ {
+		fmt.Printf("  %d) duck %s\n", i+1, matches[i].path)
+	}
+	fmt.Print("Escolha um numero para executar (enter cancela): ")
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	line = strings.TrimSpace(line)
+	if line == "" {
+		fmt.Println("Cancelado.")
+		return nil
+	}
+	index, err := strconv.Atoi(line)
+	if err != nil || index <= 0 || index > limit {
+		return cli.UsageError("indice invalido")
+	}
+	parsed, err := term.ParseLine(matches[index-1].path)
+	if err != nil {
+		return err
+	}
+	return runInline(parsed)
+}
+
+func commandCatalog(commands []cli.Command) []string {
+	out := make([]string, 0)
+	var walk func([]cli.Command, []string)
+	walk = func(items []cli.Command, prefix []string) {
+		for _, item := range items {
+			current := append(prefix, item.Name)
+			if len(item.Children) == 0 {
+				out = append(out, strings.Join(current, " "))
+				continue
+			}
+			walk(item.Children, current)
+		}
+	}
+	walk(commands, nil)
+	return out
+}
+
+func scoreMatch(query, candidate string) int {
+	if query == candidate {
+		return 100
+	}
+	if strings.HasPrefix(candidate, query) {
+		return 50
+	}
+	if strings.Contains(candidate, query) {
+		return 20
+	}
+	score := 0
+	cursor := 0
+	for _, char := range query {
+		pos := strings.IndexRune(candidate[cursor:], char)
+		if pos < 0 {
+			continue
+		}
+		score++
+		cursor += pos + 1
+		if cursor >= len(candidate) {
+			break
+		}
+	}
+	return score
 }
 
 func watchCommand(_ cli.Context, args []string) error {
@@ -461,7 +699,7 @@ func expandAliasArgs(args []string) []string {
 	if alias == "" {
 		return args
 	}
-	parsed, err := parseTerminalLine(alias)
+	parsed, err := term.ParseLine(alias)
 	if err != nil {
 		return args
 	}
@@ -538,6 +776,8 @@ func doctor(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 			return cli.UsageError("doctor nao recebe argumentos")
 		}
 
+		printDuckVersion()
+		fmt.Println()
 		statuses := toolStatuses(cfg, run)
 		allOK := true
 		for _, status := range statuses {
@@ -554,25 +794,28 @@ func doctor(cfg config.Config, run runner.Runner) func(cli.Context, []string) er
 	}
 }
 
-func version(_ cli.Context, args []string) error {
+func showVersion(_ cli.Context, args []string) error {
 	if len(args) > 0 {
 		return cli.UsageError("version nao recebe argumentos")
 	}
-	fmt.Println("duck", Version)
-	fmt.Println("commit:", Commit)
-	fmt.Println("build:", Date)
-	fmt.Println("go:", runtime.Version())
-	fmt.Println("os/arch:", runtime.GOOS+"/"+runtime.GOARCH)
+	fmt.Println(version.Details())
 	return nil
 }
 
 func update(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
-	return func(_ cli.Context, args []string) error {
-		if len(args) > 0 {
-			return cli.UsageError("update nao recebe argumentos")
+	return func(ctx cli.Context, args []string) error {
+		opts := selfupdate.Options{}
+		for _, arg := range args {
+			switch arg {
+			case "--check":
+				opts.CheckOnly = true
+			case "--install":
+				opts.Install = true
+			default:
+				return cli.UsageError("opcao invalida para update: " + arg)
+			}
 		}
-		fmt.Println("Atualizando Duck com go install .")
-		return run.Run(cfg.GoBin, []string{"install", "."}, runner.DefaultOptions())
+		return selfupdate.RunOptions(ctx.Stdout, version.Label(), opts)
 	}
 }
 
@@ -680,104 +923,11 @@ func historyRun(value string) error {
 	if index > len(entries) {
 		return cli.UsageError("entrada de historico nao encontrada")
 	}
-	args, err := parseTerminalLine(entries[index-1].Command)
+	args, err := term.ParseLine(entries[index-1].Command)
 	if err != nil {
 		return err
 	}
 	return runInline(args)
-}
-
-func terminal(cfg config.Config, run runner.Runner) func(cli.Context, []string) error {
-	return func(_ cli.Context, args []string) error {
-		if len(args) > 0 {
-			return cli.UsageError("terminal nao recebe argumentos")
-		}
-
-		fmt.Println("Duck terminal. Digite 'help' para ajuda ou 'exit' para sair.")
-		scanner := bufio.NewScanner(os.Stdin)
-		for {
-			fmt.Print(terminalPrompt())
-			if !scanner.Scan() {
-				fmt.Println()
-				return scanner.Err()
-			}
-
-			line := strings.TrimSpace(scanner.Text())
-			if line == "" {
-				continue
-			}
-			switch strings.ToLower(line) {
-			case "exit", "quit":
-				return nil
-			case "pwd":
-				wd, err := os.Getwd()
-				if err != nil {
-					fmt.Println("Erro:", err)
-				} else {
-					fmt.Println(wd)
-				}
-				continue
-			case "clear", "cls":
-				fmt.Print("\033[H\033[2J")
-				continue
-			}
-			if strings.HasPrefix(line, "cd ") {
-				dir := strings.TrimSpace(strings.TrimPrefix(line, "cd "))
-				if err := os.Chdir(dir); err != nil {
-					fmt.Println("Erro:", err)
-				}
-				continue
-			}
-			if strings.HasPrefix(line, "!") {
-				if err := historyRun(strings.TrimPrefix(line, "!")); err != nil {
-					fmt.Println("Erro:", err)
-				}
-				continue
-			}
-
-			parsed, err := parseTerminalLine(line)
-			if err != nil {
-				fmt.Println("Erro:", err)
-				continue
-			}
-			if len(parsed) == 0 {
-				continue
-			}
-			if parsed[0] == Name {
-				parsed = parsed[1:]
-			}
-			if len(parsed) == 0 {
-				continue
-			}
-			if parsed[0] == "terminal" || parsed[0] == "console" || parsed[0] == "repl" {
-				fmt.Println("Voce ja esta no terminal Duck.")
-				continue
-			}
-
-			_ = history.Record(parsed)
-			code := cli.Run(Name, Commands(cfg, run), parsed)
-			if code != 0 {
-				fmt.Println("Comando finalizado com erro:", code)
-			}
-		}
-	}
-}
-
-func terminalPrompt() string {
-	settings, _ := config.LoadSettings()
-	awsProfile := settings["aws.profile"]
-	kubeNamespace := settings["kube.namespace"]
-	parts := make([]string, 0, 2)
-	if awsProfile != "" {
-		parts = append(parts, "aws:"+awsProfile)
-	}
-	if kubeNamespace != "" {
-		parts = append(parts, "ns:"+kubeNamespace)
-	}
-	if len(parts) == 0 {
-		return "duck> "
-	}
-	return "duck[" + strings.Join(parts, " ") + "]> "
 }
 
 func runInline(args []string) error {
@@ -843,7 +993,7 @@ _arguments "1: :(%s)"
 }
 
 func completionWords() string {
-	return "init config status doctor version update completion autocomplete history terminal console repl profile task aliases explain last watch dashboard logs troubleshoot deploy monitor alerts trace logs-search encrypt decrypt password qr serve cidr calc json yaml install setup tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a check export import format validate get aws overlap ip ps find stats ports inspect health wait-healthy cp-from cp-to size open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host"
+	return "init config status doctor version update download urls template tpl scaffold new create completion autocomplete help history terminal console repl sh tui profile task aliases explain last recent favorites palette command-palette watch dashboard logs troubleshoot deploy monitor alerts trace logs-search perf load ports kill-port open encrypt decrypt password qr serve zip unzip find search cidr calc json yaml git g install setup autoupdate tools wsl docker d go java j node n python py maven gradle npm pnpm env project port curl http kube k aws a terraform tf helm h check init plan apply destroy workspace import providers cmd bash powershell ps pwsh check export import example format validate get aws overlap ip ps pick stats ports inspect health wait-healthy cp-from cp-to size ext dir open top backup-volume restore-volume images volumes networks start stop restart logs shell exec rm rm-all clean-all clean-images clean-volumes rmi pull build run up down compose compose-find compose-status compose-up compose-ps compose-logs compose-stop compose-restart compose-down compose-rm prune raw current version list ls add path home use cert alias storepass cacerts no-sudo no-persist venv create detect doctor ingress resources failed clean-failed dns tcp curl-many contexts ctx ns pods svc deploy events port-forward top-pods top-nodes scale image wait debug profiles configure whoami regions switch-profile sso-login s3-ls s3-cp s3-sync s3-rm ec2-instances ec2-ssh ec2-start ec2-stop ec2-reboot eks-clusters eks-nodegroups eks-scale eks-contexts eks-describe eks-use eks-update-kubeconfig ecs-services ecs-restart rds-list rds-connect-info sg-open iam-who-can costs secrets params deploy-ecr ecr-images ecr-login test package build dev install lint format pip-install auto once interval namespace length token pass host duration concurrency listen requests local swagger github aws-console save wip sync publish ship branches branch new switch co cleanup stash tag undo ignore remote root staged unstage run top search yes force timeout quiet no-color json"
 }
 
 func installCompletion(shell string) error {
@@ -894,54 +1044,6 @@ func completionProfile(shell string) (string, error) {
 	}
 }
 
-func parseTerminalLine(line string) ([]string, error) {
-	var args []string
-	var current strings.Builder
-	var quote rune
-	escaped := false
-
-	for _, char := range line {
-		if escaped {
-			current.WriteRune(char)
-			escaped = false
-			continue
-		}
-		if char == '\\' {
-			escaped = true
-			continue
-		}
-		if quote != 0 {
-			if char == quote {
-				quote = 0
-				continue
-			}
-			current.WriteRune(char)
-			continue
-		}
-		switch char {
-		case '\'', '"':
-			quote = char
-		case ' ', '\t':
-			if current.Len() > 0 {
-				args = append(args, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteRune(char)
-		}
-	}
-	if escaped {
-		current.WriteRune('\\')
-	}
-	if quote != 0 {
-		return nil, fmt.Errorf("aspas nao fechadas")
-	}
-	if current.Len() > 0 {
-		args = append(args, current.String())
-	}
-	return args, nil
-}
-
 type toolStatus struct {
 	Name       string `json:"name"`
 	OK         bool   `json:"ok"`
@@ -952,12 +1054,15 @@ type toolStatus struct {
 func toolStatuses(cfg config.Config, run runner.Runner) []toolStatus {
 	statuses := []toolStatus{
 		checkToolStatus("Go", cfg.GoBin, []string{"version"}, "Instale Go 1.22+ ou ajuste DUCK_GO_BIN.", run),
+		checkToolStatus("Git", cfg.GitBin, []string{"--version"}, "Instale Git ou ajuste DUCK_GIT_BIN.", run),
 		checkToolStatus("Docker", cfg.DockerBin, []string{"version", "--format", "{{.Client.Version}}"}, "Instale/abra Docker ou ajuste DUCK_DOCKER_BIN.", run),
 		checkToolStatus("Kubernetes", cfg.KubectlBin, []string{"config", "current-context"}, "Instale kubectl ou configure KUBECONFIG/DUCK_KUBECTL_BIN.", run),
 		checkToolStatus("AWS", cfg.AWSBin, []string{"--version"}, "Instale AWS CLI v2 ou ajuste DUCK_AWS_BIN.", run),
 		checkToolStatus("Java", cfg.JavaBin, []string{"-version"}, "Instale Java/JDK ou ajuste DUCK_JAVA_BIN.", run),
 		checkToolStatus("Node", cfg.NodeBin, []string{"--version"}, "Instale Node.js ou ajuste DUCK_NODE_BIN.", run),
 		checkToolStatus("Python", cfg.PythonBin, []string{"--version"}, "Instale Python ou ajuste DUCK_PYTHON_BIN.", run),
+		checkToolStatus("Terraform", cfg.TerraformBin, []string{"version"}, "Instale Terraform ou ajuste DUCK_TERRAFORM_BIN.", run),
+		checkToolStatus("Helm", cfg.HelmBin, []string{"version", "--short"}, "Instale Helm ou ajuste DUCK_HELM_BIN.", run),
 	}
 
 	wslStatus := checkToolStatus("WSL", cfg.WSLBin, []string{"--status"}, "Instale/configure WSL se estiver no Windows.", run)

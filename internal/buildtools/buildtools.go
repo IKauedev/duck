@@ -1,8 +1,8 @@
 package buildtools
 
 import (
-	"duck/internal/cli"
-	"duck/internal/runner"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/runner"
 )
 
 func Maven(run runner.Runner) cli.Command {

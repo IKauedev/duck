@@ -1,0 +1,57 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "go: build duck",
+      "type": "shell",
+      "command": "go",
+      "args": [
+        "build",
+        "-ldflags",
+        "-X github.com/IKauedev/duck/internal/version.Version=dev -X github.com/IKauedev/duck/internal/version.Commit=local -X github.com/IKauedev/duck/internal/version.Date=local",
+        "-o",
+        "bin/duck.exe",
+        "."
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: test",
+      "type": "shell",
+      "command": "go",
+      "args": ["test", "./..."],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": ["$go"]
+    },
+    {
+      "label": "go: install delve",
+      "type": "shell",
+      "command": "go",
+      "args": ["install", "github.com/go-delve/delve/cmd/dlv@latest"],
+      "problemMatcher": []
+    },
+    {
+      "label": "go: fmt check",
+      "type": "shell",
+      "command": "gofmt",
+      "args": ["-l", "."],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    }
+  ]
+}

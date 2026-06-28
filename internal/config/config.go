@@ -8,10 +8,14 @@ type Config struct {
 	KubectlBin       string
 	AWSBin           string
 	GoBin            string
+	GitBin           string
 	JavaBin          string
 	NodeBin          string
 	PythonBin        string
 	WSLBin           string
+	TerraformBin     string
+	HelmBin          string
+	MongoBin         string
 }
 
 func Load() Config {
@@ -21,10 +25,14 @@ func Load() Config {
 		KubectlBin:       envOrDefault("DUCK_KUBECTL_BIN", "kubectl"),
 		AWSBin:           envOrDefault("DUCK_AWS_BIN", "aws"),
 		GoBin:            envOrDefault("DUCK_GO_BIN", "go"),
+		GitBin:           envOrDefault("DUCK_GIT_BIN", "git"),
 		JavaBin:          envOrDefault("DUCK_JAVA_BIN", "java"),
 		NodeBin:          envOrDefault("DUCK_NODE_BIN", "node"),
 		PythonBin:        envOrDefault("DUCK_PYTHON_BIN", "python"),
 		WSLBin:           envOrDefault("DUCK_WSL_BIN", "wsl"),
+		TerraformBin:     envOrDefault("DUCK_TERRAFORM_BIN", "terraform"),
+		HelmBin:          envOrDefault("DUCK_HELM_BIN", "helm"),
+		MongoBin:         envOrDefault("DUCK_MONGO_BIN", ""),
 	}
 }
 

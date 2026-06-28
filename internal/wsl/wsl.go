@@ -6,9 +6,9 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"duck/internal/cli"
-	"duck/internal/config"
-	"duck/internal/runner"
+	"github.com/IKauedev/duck/internal/cli"
+	"github.com/IKauedev/duck/internal/config"
+	"github.com/IKauedev/duck/internal/runner"
 )
 
 type service struct {

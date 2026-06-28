@@ -35,8 +35,9 @@ Durante o desenvolvimento:
 
 ```sh
 go run . help
-go run ./cmd/duck help
 ```
+
+Para depurar no Cursor ou VS Code (CLI, TUI, testes e attach com Delve), veja [`docs/debug.md`](docs/debug.md).
 
 Gerar binario no Windows:
 
@@ -48,6 +49,105 @@ Gerar binario no Linux ou WSL:
 
 ```sh
 go build -o duck .
+```
+
+Releases oficiais sao publicados no GitHub Releases com binarios para Windows, Linux e macOS. Para atualizar um Duck instalado por release:
+
+```sh
+duck update
+```
+
+## Instalar via Terminal
+
+Nao e necessario ter Go instalado para compilar o Duck. Existem varias formas de baixar e instalar:
+
+### 1. Comando integrado (recomendado)
+
+Se voce ja tem qualquer versao do Duck (ou baixou o zip manualmente uma vez):
+
+```sh
+duck download --install
+duck download --install --dir C:\Users\voce\bin
+duck download --urls
+duck update
+```
+
+`duck download --urls` mostra links diretos para download manual (uteis quando a API do GitHub e bloqueada).
+
+### 2. Script CMD no Windows (sem PowerShell)
+
+Ideal para maquinas corporativas onde PowerShell e bloqueado:
+
+```cmd
+git clone https://github.com/IKauedev/duck.git
+cd duck
+scripts\install-windows.cmd
+```
+
+Ou baixe apenas o script e execute no CMD. O instalador usa `curl`, `certutil` ou `bitsadmin` para baixar e `duck install` para configurar o PATH **sem PowerShell**.
+
+### 3. Script shell no Linux/macOS/WSL
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/IKauedev/duck/main/scripts/install-linux.sh | sh
+```
+
+Ou:
+
+```sh
+git clone https://github.com/IKauedev/duck.git
+cd duck
+chmod +x scripts/install-linux.sh
+./scripts/install-linux.sh
+```
+
+### 4. Download manual (PowerShell)
+
+```powershell
+iwr https://github.com/IKauedev/duck/releases/latest/download/duck_windows_amd64.zip -OutFile duck.zip
+Expand-Archive duck.zip -DestinationPath .
+.\duck.exe install
+```
+
+### 5. Download manual (CMD + tar)
+
+```cmd
+curl -fsSL -o duck.zip https://github.com/IKauedev/duck/releases/latest/download/duck_windows_amd64.zip
+tar -xf duck.zip
+duck.exe install
+```
+
+### 6. Download manual (Linux amd64)
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_linux_amd64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+### 7. Download manual (macOS)
+
+Intel:
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_amd64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+Apple Silicon:
+
+```sh
+curl -L https://github.com/IKauedev/duck/releases/latest/download/duck_darwin_arm64.tar.gz -o duck.tar.gz
+tar -xzf duck.tar.gz
+./duck install
+```
+
+Depois abra um novo terminal e teste:
+
+```sh
+duck help
+duck update
 ```
 
 ## Instalar e Configurar PATH
@@ -74,7 +174,7 @@ No Linux ou WSL:
 
 O comando copia o executavel para a pasta `bin` do usuario e adiciona essa pasta ao `PATH`:
 
-- Windows: `%USERPROFILE%\bin`, atualizando o `Path` do usuario.
+- Windows: `%USERPROFILE%\bin`, atualizando o `Path` do usuario via registro do Windows ou `setx` (sem PowerShell).
 - Linux/WSL: `$HOME/bin`, atualizando `.bashrc`, `.zshrc` ou `.profile` conforme o shell.
 
 Depois abra um novo terminal e teste:
@@ -89,6 +189,8 @@ Outras opcoes:
 duck install --force
 duck install --dir /caminho/customizado
 duck install --no-path
+duck download --install
+duck download --urls
 duck setup path
 duck setup path --dir /caminho/customizado
 ```
@@ -105,9 +207,12 @@ DUCK_DOCKER_COMPOSE_BIN=/caminho/para/docker-compose
 DUCK_KUBECTL_BIN=/caminho/para/kubectl
 DUCK_AWS_BIN=/caminho/para/aws
 DUCK_GO_BIN=/caminho/para/go
+DUCK_GIT_BIN=/caminho/para/git
 DUCK_JAVA_BIN=/caminho/para/java
 DUCK_NODE_BIN=/caminho/para/node
 DUCK_PYTHON_BIN=/caminho/para/python
+DUCK_TERRAFORM_BIN=/caminho/para/terraform
+DUCK_HELM_BIN=/caminho/para/helm
 DUCK_WSL_BIN=/caminho/para/wsl
 ```
 
@@ -133,6 +238,13 @@ duck profile use dev
 duck task add start "docker compose-up -d"
 duck task run start
 duck aliases add dps "docker ps -a"
+duck help search git
+duck palette docker
+duck recent
+duck recent top 15
+duck favorites add deploy "deploy compose --build"
+duck favorites list
+duck favorites run deploy
 duck explain docker ps
 duck last
 duck watch --interval 5 status
@@ -144,12 +256,29 @@ duck troubleshoot api.local 443
 duck monitor --once
 duck alerts
 duck trace api.local 443 https://api.local
+duck perf https://api.local --requests 50
+duck load https://api.local --duration 10 --concurrency 5
+duck ports --listen
+duck kill-port 3000
+duck env example .env .env.example
+duck open local 3000
+duck open swagger 8080
+duck open github
+duck open aws-console ec2
+duck git status
+duck git save "feat: adiciona comando"
+duck git sync
+duck git ship "fix: ajusta README"
 duck password --length 32
 duck password --token 32
 duck encrypt .env.local .env.local.duck --pass minha-senha
 duck decrypt .env.local.duck .env.local --pass minha-senha
 duck qr http://localhost:8080
 duck serve . --port 8080
+duck zip backup.zip ./logs .env
+duck unzip backup.zip ./restore
+duck find --ext pdf relatorio
+duck find --size +100MB
 duck cidr aws 10.0.1.0/24
 duck cidr overlap 10.0.0.0/16 10.0.1.0/24
 duck calc ip 172.31.0.0/20
@@ -172,15 +301,23 @@ duck history [--limit N|--all|--clear|--path]
 duck history search <termo>
 duck history run <numero>
 duck terminal
+duck terminal cmd
+duck terminal powershell
+duck terminal bash
+duck terminal wsl Ubuntu-22.04
+duck tui
 duck install
 duck setup path
 duck setup tools docker
 duck setup tools compose
 duck setup tools kubectl
+duck setup tools terraform
+duck setup tools helm
 duck setup tools curl
 duck setup tools all
 duck wsl status
 duck docker help
+duck docker pick
 duck go help
 duck java help
 duck node help
@@ -188,11 +325,27 @@ duck python help
 duck env doctor
 duck env export duck-config.json
 duck env import duck-config.json
+duck env example .env .env.example
 duck project detect
 duck curl <url> [--port porta] [--timeout segundos] [--insecure]
 duck port check <host> <port>
+duck cert fetch <url|host> [--port porta] [--chain] [--timeout segundos] [--dir pasta]
+duck cert import <arquivo|url>
+duck cert dir
 duck kube help
 duck aws help
+duck terraform help
+duck helm help
+```
+
+Flags globais disponiveis em qualquer comando:
+
+```sh
+duck --json <comando>
+duck --quiet <comando>
+duck --no-color <comando>
+duck --timeout 30 <comando>
+duck --yes <comando>
 ```
 
 `duck status` mostra a disponibilidade de Go, Docker, Kubernetes, AWS, Java, Node e Python sem impedir o uso dos demais grupos caso uma ferramenta esteja ausente.
@@ -203,6 +356,8 @@ duck aws help
 duck setup tools docker
 duck setup tools compose
 duck setup tools kubectl
+duck setup tools terraform
+duck setup tools helm
 duck setup tools curl
 duck setup tools all
 ```
@@ -218,7 +373,52 @@ duck curl https://api.local --insecure
 duck port check localhost 5432
 ```
 
-`duck profile`, `duck task` e `duck aliases` usam o arquivo de configuracao do Duck para salvar perfis, tarefas e atalhos customizados.
+`duck cert fetch` conecta ao servidor HTTPS/TLS, extrai o certificado apresentado no handshake e salva em PEM na pasta de certificados do Duck. Use `duck cert import` para copiar ou baixar um arquivo `.crt`/`.pem` de uma URL; use `duck cert dir` para ver onde os arquivos ficam salvos.
+
+```sh
+duck cert fetch https://example.com
+duck cert fetch api.local --port 8443
+duck cert fetch example.com --chain
+duck cert fetch example.com --dir C:\certs
+duck cert import C:\certs\empresa.crt
+duck cert import https://example.com/ca.crt
+duck cert dir
+```
+
+Os certificados ficam em `%APPDATA%\duck\certificates` no Windows e em `~/.config/duck/certificates` no Linux/macOS/WSL. Depois de buscar ou importar, use `duck java cert` ou `duck node cert` para aplicar o certificado na JVM ou no Node.js.
+
+`duck profile`, `duck task`, `duck aliases` e `duck favorites` usam o arquivo de configuracao do Duck para salvar preferencias e atalhos. `duck recent` mostra comandos recentes/mais usados e `duck palette` permite buscar e executar comandos por texto livre.
+
+## Git
+
+```sh
+duck git status
+duck git info
+duck git log -n 20
+duck git diff
+duck git diff --staged
+duck git save "feat: adiciona recurso"
+duck git wip "ajustes locais"
+duck git sync
+duck git publish
+duck git ship "fix: corrige fluxo"
+duck git branches
+duck git new feature/minha-branch
+duck git switch main
+duck git cleanup
+duck git stash save "pausando trabalho"
+duck git stash list
+duck git stash pop
+duck git tag v1.2.3 "Release v1.2.3"
+duck git undo unstage
+duck git undo last
+duck git ignore ".env.local"
+duck git remote
+duck git root
+duck git raw status
+```
+
+`duck git save` faz `add -A` e commit em um comando. `duck git sync` faz `pull --rebase` e `push`. `duck git ship` combina commit, rebase e push para fluxos simples. `duck git cleanup` remove apenas branches locais ja mergeadas e preserva branches comuns como `main`, `master`, `develop`, `staging` e `production`.
 
 ## Utilitarios Locais
 
@@ -229,6 +429,20 @@ duck encrypt <arquivo> [saida] --pass <senha>
 duck decrypt <arquivo> [saida] --pass <senha>
 duck qr <texto|url>
 duck serve [pasta] [--port porta] [--host host]
+duck perf <url> [--requests N]
+duck load <url> [--duration segundos] [--concurrency N]
+duck ports [--listen]
+duck kill-port <porta>
+duck open <url>
+duck open local [porta]
+duck open swagger [porta]
+duck open github
+duck open aws-console [servico]
+duck open ingress [host]
+duck zip <saida.zip> <arquivo|pasta...>
+duck unzip <arquivo.zip> [destino]
+duck find [--path pasta] [--ext extensao] [--size +100MB|-10MB] [termo]
+duck search [--path pasta] [--ext extensao] [--size +100MB|-10MB] [termo]
 duck cidr calc <cidr>
 duck cidr aws <cidr>
 duck cidr overlap <cidr1> <cidr2>
@@ -240,7 +454,7 @@ duck yaml format [arquivo]
 duck yaml validate [arquivo]
 ```
 
-`duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
+`duck perf` mede latencia HTTP com min/media/p95/p99 e throughput. `duck load` executa carga HTTP basica com concorrencia. `duck ports` lista portas locais e PIDs; `duck kill-port` finaliza o processo preso em uma porta. `duck open` abre recursos uteis no navegador. `duck zip` e `duck unzip` compactam e descompactam arquivos/pastas diretamente em Go, sem depender de ferramentas externas do sistema. `duck find` busca arquivos por nome, extensao e tamanho; `duck search` e um alias do mesmo comando. `duck cidr aws` calcula subnets IPv4 pensando em AWS: mostra se o range e publico ou privado, total de IPs, IPs utilizaveis e os cinco IPs reservados pela AWS em cada subnet. `duck json` e `duck yaml` aceitam arquivo ou stdin nos comandos de formatacao/validacao.
 
 ## Operacoes Inteligentes
 
@@ -276,12 +490,42 @@ duck history --path
 
 `duck terminal` abre um modo interativo para usar o Duck como um terminal personalizado em Windows, Linux ou WSL:
 
+```sh
+duck terminal
+duck terminal cmd
+duck terminal powershell
+duck terminal bash
+duck terminal wsl Ubuntu-22.04
+```
+
+Dentro do terminal Duck (`duck terminal`):
+
 ```text
 duck> status
 duck> docker ps -a
-duck> aws whoami
+duck> terraform plan
+duck> $ dir
+duck> shell wsl
+duck> help
 duck> exit
 ```
+
+Atalhos uteis no terminal Duck:
+
+- `$ comando` ou `@ comando` — executa comando nativo do sistema (CMD no Windows, sh no Linux)
+- `shell cmd|powershell|bash|wsl [distro]` — abre shell nativa e volta ao Duck depois
+- `!N` — repete entrada do historico Duck
+- `cd`, `pwd`, `clear`/`cls`, `help`, `exit`
+
+Aliases: `duck console`, `duck repl`, `duck sh`.
+
+`duck tui` abre uma interface terminal full-screen com abas para Docker, Kubernetes e AWS:
+
+```sh
+duck tui
+```
+
+Use `tab`/`shift+tab` para trocar de aba, `r` para atualizar e `q` para sair.
 
 Para habilitar autocomplete no shell atual, gere o script ou instale diretamente no perfil do usuario:
 
@@ -292,6 +536,8 @@ duck completion install bash
 duck completion install zsh
 ```
 
+Veja a pagina dedicada em [`docs/completion.md`](docs/completion.md). O caminho recomendado e `duck completion install <bash|zsh|powershell>`.
+
 ## Docker
 
 Grupo principal:
@@ -301,6 +547,9 @@ duck docker status
 duck docker status <container...>
 duck docker ps
 duck docker ps -a
+duck docker pick
+duck docker pick logs
+duck docker pick shell
 duck docker find <termo>
 duck docker stats [container...]
 duck docker ports <container>
@@ -334,6 +583,8 @@ duck docker clean-images [-f|--force]
 duck docker clean-volumes [-f|--force]
 duck docker rmi [-f|--force] <image...>
 duck docker pull <image>
+duck docker build -t minha-imagem .
+duck docker build <argumentos do docker build>
 duck docker run <argumentos do docker run>
 duck docker up [argumentos do docker compose up]
 duck docker down [argumentos do docker compose down]
@@ -352,6 +603,15 @@ duck docker raw <argumentos diretos do docker>
 ```
 
 No Linux/WSL, os comandos Compose tentam usar `docker compose` primeiro. Se o plugin nao existir, o Duck tenta usar o binario classico `docker-compose`.
+
+`duck docker pick` lista containers em uma interface interativa para escolher o alvo e executar uma acao comum:
+
+```sh
+duck docker pick
+duck docker pick logs
+duck docker pick shell
+duck docker pick restart
+```
 
 Alias curto:
 
@@ -422,6 +682,34 @@ go vet ./...
 go test ./...
 ```
 
+## Certificados SSL/TLS
+
+Use `duck cert` para buscar certificados de servidores HTTPS/TLS ou importar arquivos para a pasta de configuracao do Duck:
+
+```sh
+duck cert fetch https://example.com
+duck cert fetch api.empresa.com --port 8443
+duck cert fetch example.com --chain
+duck cert fetch example.com --timeout 20
+duck cert fetch example.com --dir /caminho/customizado
+duck cert import /caminho/para/certificado.crt
+duck cert import https://example.com/ca.crt
+duck cert dir
+```
+
+`duck cert fetch` conecta ao host informado, obtém o certificado apresentado no handshake TLS e salva em PEM. Com `--chain`, salva também a cadeia completa em `{host}-chain.pem`. O Duck usa `InsecureSkipVerify` apenas para capturar o certificado, inclusive quando a cadeia e invalida ou autoassinada.
+
+Fluxo completo para confiar no certificado de um servidor interno:
+
+```sh
+duck cert fetch https://api.empresa.com
+duck cert dir
+duck java cert %APPDATA%\duck\certificates\api.empresa.com.pem --alias api-empresa
+duck node cert %APPDATA%\duck\certificates\api.empresa.com.pem
+```
+
+No Linux/WSL, troque `%APPDATA%\duck\certificates` por `~/.config/duck/certificates`.
+
 ## Java
 
 Use estes comandos para ver e alternar JDKs pelo Duck:
@@ -434,12 +722,16 @@ duck java use 17
 duck java use 17 --persist
 duck java path 17
 duck java home
+duck java cert /caminho/para/certificado.crt --alias empresa
+duck java cert https://example.com/certificado.crt --alias empresa
 duck java raw -version
 ```
 
 No Windows, `duck java use <alias|JAVA_HOME> --persist` usa `setx` para persistir `JAVA_HOME` e colocar `%JAVA_HOME%\bin` no `PATH` do usuario. Abra um novo terminal depois.
 
 No Linux/WSL, o mesmo comando adiciona `JAVA_HOME` e `PATH` ao perfil do shell (`.bashrc`, `.zshrc` ou `.profile`).
+
+`duck java cert` copia ou baixa o certificado para a pasta de configuracao do Duck e importa no truststore `cacerts` da JVM atual usando `keytool`. Se voce so tem a URL do servidor, use antes `duck cert fetch <url>` para extrair o certificado TLS e depois passe o arquivo `.pem` gerado para `duck java cert`. Por padrao a senha do truststore e `changeit`; use `--storepass` ou `--cacerts` quando sua JVM usar outro caminho/senha. No Linux/Unix, se o `cacerts` nao for gravavel pelo usuario, o Duck tenta executar `sudo keytool`; use `--no-sudo` para desativar esse comportamento.
 
 Para salvar um JDK detectado manualmente:
 
@@ -457,10 +749,14 @@ duck node add 20 /caminho/para/node-v20
 duck node use 20
 duck node use 20 --persist
 duck node home
+duck node cert /caminho/para/certificado.pem
+duck node cert https://example.com/certificado.pem
 duck node raw --version
 ```
 
 `duck node use <version>` salva a versao atual do Node no config do Duck. Use `duck node add` para mapear uma versao para uma pasta instalada.
+
+`duck node cert` copia ou baixa o certificado para a pasta de configuracao do Duck e configura `NODE_EXTRA_CA_CERTS` para o usuario. Se voce so tem a URL do servidor, use antes `duck cert fetch <url>` para extrair o certificado TLS. No Windows usa `setx`; no Linux/Unix adiciona a variavel em `.bashrc`, `.zshrc` ou `.profile`. Abra um novo terminal para o Node carregar a variavel persistida.
 
 ## Python
 
@@ -484,13 +780,68 @@ duck python raw -m pip install -r requirements.txt
 duck env doctor
 duck env export duck-config.json
 duck env import duck-config.json
+duck env example .env .env.example
 duck project detect
 duck project doctor
 duck project up
 duck project down
+duck template list
+duck template new docker api
+duck template new compose web
+duck template new terraform infra
+duck template new jenkins ci
+duck template new helm chart
+duck template new kubernetes app
+duck update --check
+duck setup autoupdate enable
 ```
 
-`duck env doctor` valida `PATH`, `JAVA_HOME`, `NODE_HOME` e binarios comuns. `duck env export/import` facilita levar perfis, tasks, aliases e preferencias do Duck para outra maquina. `duck project detect` identifica stacks pelo projeto atual, como Go, Node.js, Python, Java, Docker, Compose, Kubernetes, Helm e Terraform.
+## Templates de Projeto
+
+Crie projetos prontos pelo terminal, sem copiar arquivos manualmente:
+
+```sh
+duck template list
+duck template new docker api
+duck template new compose web --dir ./web
+duck template new terraform infra
+duck template new jenkins ci
+duck template new helm mychart
+duck template new kubernetes app
+duck template new go service
+```
+
+Templates disponiveis:
+
+| Tipo | Conteudo |
+|------|----------|
+| `docker` | Go + Dockerfile multi-stage |
+| `compose` | Docker Compose + PostgreSQL |
+| `terraform` | VPC AWS basica |
+| `jenkins` | Jenkinsfile + compose local |
+| `helm` | Chart Deployment/Service |
+| `kubernetes` | Manifestos + Kustomize |
+| `go` | API Go com `/health` |
+
+Aliases: `docker-compose` → compose, `tf` → terraform, `ci` → jenkins, `k8s` → kubernetes.
+
+Use `--force` para sobrescrever arquivos existentes.
+
+## Atualizacao automatica
+
+```sh
+duck update --check
+duck update
+duck update --install
+duck setup autoupdate enable
+duck setup autoupdate enable --time 08:30
+duck setup autoupdate status
+duck setup autoupdate disable
+```
+
+No Windows, o autoupdate usa **schtasks** (CMD nativo, sem PowerShell). No Linux/macOS, adiciona entrada no **crontab**.
+
+`duck env doctor` valida `PATH`, `JAVA_HOME`, `NODE_HOME` e binarios comuns. `duck env export/import` facilita levar perfis, tasks, aliases e preferencias do Duck para outra maquina. `duck env example` gera `.env.example` preservando chaves e removendo valores reais. `duck project detect` identifica stacks pelo projeto atual, como Go, Node.js, Python, Java, Docker, Compose, Kubernetes, Helm e Terraform.
 
 ## Build Tools
 
@@ -628,11 +979,68 @@ duck a logs /aws/lambda/minha-funcao --follow
 
 Os comandos AWS usam a configuracao normal da AWS CLI, incluindo `~/.aws/config`, `~/.aws/credentials`, `AWS_PROFILE`, `AWS_REGION` e flags `--profile`/`--region` quando aceitas pelo atalho.
 
+## Terraform
+
+```sh
+duck terraform version
+duck terraform init
+duck terraform plan
+duck terraform apply
+duck terraform apply -auto-approve
+duck terraform destroy
+duck terraform validate
+duck terraform fmt
+duck terraform output
+duck terraform show
+duck terraform state list
+duck terraform workspace list
+duck terraform import <address> <id>
+duck terraform providers
+duck terraform check
+duck terraform raw <args...>
+```
+
+Alias curto:
+
+```sh
+duck tf init
+duck tf plan
+duck tf apply -auto-approve
+```
+
+`apply` e `destroy` pedem confirmacao, a menos que voce use `-auto-approve` ou a flag global `--yes`.
+
+## Helm
+
+```sh
+duck helm version
+duck helm list
+duck helm list -A
+duck helm status <release>
+duck helm install <release> <chart>
+duck helm upgrade <release> <chart>
+duck helm upgrade --install api ./chart
+duck helm uninstall <release>
+duck helm template <release> <chart>
+duck helm lint <chart>
+duck helm repo list
+duck helm raw <args...>
+```
+
+Alias curto:
+
+```sh
+duck h list -A
+duck h upgrade --install api ./chart
+```
+
 ## Acoes Destrutivas
 
 Comandos destrutivos pedem confirmacao quando usados sem flags de confirmacao:
 
 ```sh
+duck terraform destroy
+duck helm uninstall api
 duck docker rm api
 duck docker rm-all
 duck docker clean-all

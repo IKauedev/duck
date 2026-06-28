@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
+
+	"github.com/IKauedev/duck/internal/version"
 )
 
 type Command struct {
@@ -19,30 +23,113 @@ type Command struct {
 	Run         func(Context, []string) error
 }
 
+type GlobalOptions struct {
+	JSON    bool
+	Quiet   bool
+	NoColor bool
+	Timeout time.Duration
+	Force   bool
+}
+
 type Context struct {
 	AppName string
 	Stdout  io.Writer
 	Stderr  io.Writer
+	Options GlobalOptions
+}
+
+type usageError struct {
+	message string
+}
+
+func (e usageError) Error() string {
+	return e.message
+}
+
+func UsageError(message string) error {
+	return usageError{message: message}
+}
+
+func ExtractGlobalOptions(args []string) ([]string, GlobalOptions, error) {
+	opts := GlobalOptions{}
+	filtered := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--json":
+			opts.JSON = true
+		case "--quiet":
+			opts.Quiet = true
+		case "--no-color":
+			opts.NoColor = true
+		case "--timeout":
+			if i+1 >= len(args) {
+				return nil, opts, UsageError("--timeout precisa de um valor")
+			}
+			seconds, err := strconv.Atoi(args[i+1])
+			if err != nil || seconds <= 0 {
+				return nil, opts, UsageError("--timeout precisa ser numero positivo")
+			}
+			opts.Timeout = time.Duration(seconds) * time.Second
+			i++
+		case "--yes", "-y", "--force":
+			opts.Force = true
+		default:
+			filtered = append(filtered, args[i])
+		}
+	}
+	return filtered, opts, nil
 }
 
 func Run(appName string, commands []Command, args []string) int {
+	filteredArgs, options, err := ExtractGlobalOptions(args)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Erro:", err)
+		return 1
+	}
+
 	ctx := Context{
 		AppName: appName,
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
+		Options: options,
 	}
 
-	if len(args) == 0 {
+	if options.NoColor {
+		_ = os.Setenv("NO_COLOR", "1")
+	}
+	if options.Timeout > 0 {
+		_ = os.Setenv("DUCK_TIMEOUT", strconv.Itoa(int(options.Timeout.Seconds())))
+	}
+	if options.Force {
+		_ = os.Setenv("DUCK_FORCE", "1")
+	}
+	if options.Quiet {
+		devNull, openErr := os.OpenFile(os.DevNull, os.O_WRONLY, 0644)
+		if openErr == nil {
+			defer devNull.Close()
+			original := os.Stdout
+			os.Stdout = devNull
+			defer func() { os.Stdout = original }()
+			ctx.Stdout = devNull
+		}
+	}
+
+	if len(filteredArgs) == 0 {
 		PrintHelp(ctx, commands, nil)
 		return 0
 	}
 
-	if args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		PrintHelp(ctx, commands, args[1:])
+	if filteredArgs[0] == "help" || filteredArgs[0] == "-h" || filteredArgs[0] == "--help" {
+		PrintHelp(ctx, commands, filteredArgs[1:])
 		return 0
 	}
 
-	if err := execute(ctx, commands, args, nil); err != nil {
+	if len(filteredArgs) == 1 && (filteredArgs[0] == "--version" || filteredArgs[0] == "-V") {
+		fmt.Fprintln(ctx.Stdout, version.Details())
+		return 0
+	}
+
+	if err := execute(ctx, commands, filteredArgs, nil); err != nil {
 		fmt.Fprintln(ctx.Stderr, "Erro:", err)
 		return 1
 	}
@@ -50,8 +137,42 @@ func Run(appName string, commands []Command, args []string) int {
 	return 0
 }
 
-func UsageError(message string) error {
-	return errors.New(message)
+// RunWithOutput executa um comando redirecionando stdout e stderr para w.
+func RunWithOutput(appName string, commands []Command, args []string, w io.Writer) int {
+	filteredArgs, options, err := ExtractGlobalOptions(args)
+	if err != nil {
+		fmt.Fprintln(w, "Erro:", err)
+		return 1
+	}
+
+	ctx := Context{
+		AppName: appName,
+		Stdout:  w,
+		Stderr:  w,
+		Options: options,
+	}
+
+	if len(filteredArgs) == 0 {
+		PrintHelp(ctx, commands, nil)
+		return 0
+	}
+
+	if filteredArgs[0] == "help" || filteredArgs[0] == "-h" || filteredArgs[0] == "--help" {
+		PrintHelp(ctx, commands, filteredArgs[1:])
+		return 0
+	}
+
+	if len(filteredArgs) == 1 && (filteredArgs[0] == "--version" || filteredArgs[0] == "-V") {
+		fmt.Fprintln(w, version.Details())
+		return 0
+	}
+
+	if err := execute(ctx, commands, filteredArgs, nil); err != nil {
+		fmt.Fprintln(w, "Erro:", err)
+		return 1
+	}
+
+	return 0
 }
 
 func execute(ctx Context, commands []Command, args []string, path []string) error {
@@ -62,7 +183,11 @@ func execute(ctx Context, commands []Command, args []string, path []string) erro
 
 	selected, ok := Find(commands, args[0])
 	if !ok {
-		return fmt.Errorf("comando desconhecido: %s", args[0])
+		suggestion := suggestedCommand(args[0], commands)
+		if suggestion != "" {
+			return fmt.Errorf("comando desconhecido: %s. Voce quis dizer: %s", args[0], suggestion)
+		}
+		return fmt.Errorf("comando desconhecido: %s. Dica: use '%s help search %s'", args[0], ctx.AppName, args[0])
 	}
 
 	nextPath := append(path, selected.Name)
@@ -80,6 +205,10 @@ func execute(ctx Context, commands []Command, args []string, path []string) erro
 	}
 
 	if err := selected.Run(ctx, args[1:]); err != nil {
+		var ue usageError
+		if errors.As(err, &ue) {
+			return fmt.Errorf("%w. Proximo passo: %s help %s", err, ctx.AppName, strings.Join(nextPath, " "))
+		}
 		return fmt.Errorf("%w. Use '%s help %s' para ver ajuda", err, ctx.AppName, strings.Join(nextPath, " "))
 	}
 
@@ -88,6 +217,10 @@ func execute(ctx Context, commands []Command, args []string, path []string) erro
 
 func PrintHelp(ctx Context, commands []Command, topic []string) {
 	if len(topic) > 0 {
+		if topic[0] == "search" {
+			helpSearch(ctx, commands, topic[1:])
+			return
+		}
 		printTopic(ctx, commands, topic, nil)
 		return
 	}
@@ -102,13 +235,42 @@ func PrintHelp(ctx Context, commands []Command, topic []string) {
 	fmt.Fprintf(ctx.Stdout, "  %s doctor\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s status --json\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s terminal\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s tui\n", ctx.AppName)
 	fmt.Fprintf(ctx.Stdout, "  %s history\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s wsl status\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s docker ps -a\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s go check\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s java current\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s kube pods -n default\n", ctx.AppName)
-	fmt.Fprintf(ctx.Stdout, "  %s aws whoami\n", ctx.AppName)
+	fmt.Fprintf(ctx.Stdout, "  %s help search git\n", ctx.AppName)
+}
+
+func helpSearch(ctx Context, commands []Command, args []string) {
+	if len(args) != 1 {
+		fmt.Fprintf(ctx.Stderr, "Uso: %s help search <termo>\n", ctx.AppName)
+		return
+	}
+	term := strings.ToLower(args[0])
+	results := searchCommands(commands, nil, term)
+	if len(results) == 0 {
+		fmt.Fprintln(ctx.Stdout, "Nenhum comando encontrado para:", args[0])
+		return
+	}
+	fmt.Fprintln(ctx.Stdout, "Comandos encontrados:")
+	for _, result := range results {
+		fmt.Fprintln(ctx.Stdout, " ", result)
+	}
+}
+
+func searchCommands(commands []Command, path []string, term string) []string {
+	results := make([]string, 0)
+	for _, command := range commands {
+		currentPath := append(path, command.Name)
+		full := strings.Join(currentPath, " ")
+		haystack := strings.ToLower(full + " " + command.Description + " " + command.Usage + " " + strings.Join(command.Aliases, " "))
+		if strings.Contains(haystack, term) {
+			results = append(results, full+" - "+command.Description)
+		}
+		if len(command.Children) > 0 {
+			results = append(results, searchCommands(command.Children, currentPath, term)...)
+		}
+	}
+	return results
 }
 
 func printTopic(ctx Context, commands []Command, topic []string, path []string) {
@@ -208,6 +370,68 @@ func Find(commands []Command, name string) (Command, bool) {
 			}
 		}
 	}
-
 	return Command{}, false
+}
+
+func suggestedCommand(input string, commands []Command) string {
+	input = strings.ToLower(input)
+	best := ""
+	bestScore := 0
+	for _, candidate := range flattenCommandNames(commands) {
+		score := fuzzyScore(input, strings.ToLower(candidate))
+		if score > bestScore {
+			bestScore = score
+			best = candidate
+		}
+	}
+	if bestScore < 2 {
+		return ""
+	}
+	return best
+}
+
+func flattenCommandNames(commands []Command) []string {
+	out := make([]string, 0)
+	var walk func([]Command, []string)
+	walk = func(items []Command, prefix []string) {
+		for _, item := range items {
+			path := append(prefix, item.Name)
+			full := strings.Join(path, " ")
+			out = append(out, full)
+			for _, alias := range item.Aliases {
+				out = append(out, strings.Join(append(prefix, alias), " "))
+			}
+			if len(item.Children) > 0 {
+				walk(item.Children, path)
+			}
+		}
+	}
+	walk(commands, nil)
+	return out
+}
+
+func fuzzyScore(input, candidate string) int {
+	if input == candidate {
+		return 100
+	}
+	if strings.HasPrefix(candidate, input) {
+		return 50
+	}
+	if strings.Contains(candidate, input) {
+		return 20
+	}
+	score := 0
+	index := 0
+	for _, char := range input {
+		position := strings.IndexRune(candidate[index:], char)
+		if position == -1 {
+			continue
+		}
+		score++
+		index += position + 1
+		if index >= len(candidate) {
+			break
+		}
+	}
+	return score
 }
