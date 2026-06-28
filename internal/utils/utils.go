@@ -21,9 +21,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/IKauedev/duck/internal/cli"
 	qrcode "github.com/skip2/go-qrcode"
 	"gopkg.in/yaml.v3"
-	"github.com/IKauedev/duck/internal/cli"
 )
 
 const encryptedPrefix = "DUCK-ENC-v1"
