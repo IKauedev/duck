@@ -258,19 +258,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		// Troca de abas
-		case "alt+1", "f2":
+		// Troca de abas — ctrl+1..6, alt+1..6 e ctrl+←/→
+		case "ctrl+1", "alt+1", "f2":
 			return m.switchTab(tabShell)
-		case "alt+2", "f3":
+		case "ctrl+2", "alt+2", "f3":
 			return m.switchTab(tabDocker)
-		case "alt+3", "f4":
+		case "ctrl+3", "alt+3", "f4":
 			return m.switchTab(tabKubernetes)
-		case "alt+4", "f5":
+		case "ctrl+4", "alt+4", "f5":
 			return m.switchTab(tabAWS)
-		case "alt+5", "f6":
+		case "ctrl+5", "alt+5", "f6":
 			return m.switchTab(tabGit)
-		case "alt+6", "f7":
+		case "ctrl+6", "alt+6", "f7":
 			return m.switchTab(tabTerraform)
+
+		// Ciclar abas com ctrl+← e ctrl+→
+		case "ctrl+right":
+			next := (int(m.activeTab) + 1) % len(tabNames)
+			return m.switchTab(tabKind(next))
+		case "ctrl+left":
+			prev := (int(m.activeTab) - 1 + len(tabNames)) % len(tabNames)
+			return m.switchTab(tabKind(prev))
 
 		// Navegação histórico no input
 		case "up":

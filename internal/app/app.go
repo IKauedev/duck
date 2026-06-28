@@ -23,12 +23,14 @@ import (
 	"github.com/IKauedev/duck/internal/docker"
 	"github.com/IKauedev/duck/internal/envcheck"
 	"github.com/IKauedev/duck/internal/gittools"
+	"github.com/IKauedev/duck/internal/gittui"
 	"github.com/IKauedev/duck/internal/golang"
 	"github.com/IKauedev/duck/internal/helm"
 	"github.com/IKauedev/duck/internal/history"
 	"github.com/IKauedev/duck/internal/install"
 	"github.com/IKauedev/duck/internal/java"
 	"github.com/IKauedev/duck/internal/kubernetes"
+	"github.com/IKauedev/duck/internal/mongodb"
 	"github.com/IKauedev/duck/internal/netcheck"
 	"github.com/IKauedev/duck/internal/node"
 	"github.com/IKauedev/duck/internal/ops"
@@ -175,6 +177,8 @@ func commandTree(cfg config.Config, run runner.Runner) []cli.Command {
 		envcheck.Command(),
 		project.Command(),
 		template.Command(),
+		mongodb.Command(cfg, run),
+		gittui.Command(),
 	}
 
 	commands = append(commands, term.Command(cfg, run, func() []cli.Command {

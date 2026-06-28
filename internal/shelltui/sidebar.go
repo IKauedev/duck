@@ -18,17 +18,29 @@ func sidebarSections(tab tabKind) []sidebarSection {
 		title: "Global",
 		items: []sidebarItem{
 			{key: "Tab", desc: "foco"},
-			{key: "F1", desc: "ajuda"},
+			{key: "F1/Ctrl+H", desc: "ajuda"},
 			{key: "Ctrl+B", desc: "sidebar"},
 			{key: "Ctrl+L", desc: "limpar"},
 			{key: "Ctrl+C", desc: "sair"},
+		},
+	}
+	tabs := sidebarSection{
+		title: "Abas",
+		items: []sidebarItem{
+			{key: "Ctrl+← / →", desc: "ciclar abas"},
+			{key: "Ctrl+1", desc: "Shell"},
+			{key: "Ctrl+2", desc: "Docker"},
+			{key: "Ctrl+3", desc: "Kubernetes"},
+			{key: "Ctrl+4", desc: "AWS"},
+			{key: "Ctrl+5", desc: "Git"},
+			{key: "Ctrl+6", desc: "Terraform"},
 		},
 	}
 
 	switch tab {
 	case tabDocker:
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "Docker",
 				items: []sidebarItem{
@@ -57,7 +69,7 @@ func sidebarSections(tab tabKind) []sidebarSection {
 
 	case tabKubernetes:
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "Pods",
 				items: []sidebarItem{
@@ -84,7 +96,7 @@ func sidebarSections(tab tabKind) []sidebarSection {
 
 	case tabAWS:
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "AWS",
 				items: []sidebarItem{
@@ -100,7 +112,7 @@ func sidebarSections(tab tabKind) []sidebarSection {
 
 	case tabGit:
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "Git",
 				items: []sidebarItem{
@@ -120,7 +132,7 @@ func sidebarSections(tab tabKind) []sidebarSection {
 
 	case tabTerraform:
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "Terraform",
 				items: []sidebarItem{
@@ -139,7 +151,7 @@ func sidebarSections(tab tabKind) []sidebarSection {
 
 	default: // tabShell
 		return []sidebarSection{
-			global,
+			global, tabs,
 			{
 				title: "Duck",
 				items: []sidebarItem{

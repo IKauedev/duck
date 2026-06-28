@@ -15,6 +15,7 @@ type Config struct {
 	WSLBin           string
 	TerraformBin     string
 	HelmBin          string
+	MongoBin         string
 }
 
 func Load() Config {
@@ -31,6 +32,7 @@ func Load() Config {
 		WSLBin:           envOrDefault("DUCK_WSL_BIN", "wsl"),
 		TerraformBin:     envOrDefault("DUCK_TERRAFORM_BIN", "terraform"),
 		HelmBin:          envOrDefault("DUCK_HELM_BIN", "helm"),
+		MongoBin:         envOrDefault("DUCK_MONGO_BIN", ""),
 	}
 }
 
