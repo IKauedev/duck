@@ -50,6 +50,12 @@ import (
 
 const Name = "duck"
 
+var (
+	Version = "dev"
+	Commit  = "unknown"
+	Date    = "unknown"
+)
+
 func Run(args []string) int {
 	cfg := config.Load()
 	run := runner.New()
