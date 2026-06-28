@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/IKauedev/duck/internal/appinstall"
 	"github.com/IKauedev/duck/internal/aws"
 	"github.com/IKauedev/duck/internal/buildtools"
 	certcmd "github.com/IKauedev/duck/internal/cert"
@@ -35,6 +36,7 @@ import (
 	"github.com/IKauedev/duck/internal/python"
 	"github.com/IKauedev/duck/internal/runner"
 	"github.com/IKauedev/duck/internal/selfupdate"
+	"github.com/IKauedev/duck/internal/shelltui"
 	"github.com/IKauedev/duck/internal/template"
 	term "github.com/IKauedev/duck/internal/terminal"
 	"github.com/IKauedev/duck/internal/terraform"
@@ -178,6 +180,10 @@ func commandTree(cfg config.Config, run runner.Runner) []cli.Command {
 	commands = append(commands, term.Command(cfg, run, func() []cli.Command {
 		return commandTree(cfg, run)
 	}))
+	commands = append(commands, shelltui.Command(cfg, run, func() []cli.Command {
+		return commandTree(cfg, run)
+	}))
+	commands = append(commands, appinstall.Command())
 	commands = append(commands, docker.LegacyCommands(cfg, run)...)
 	return commands
 }

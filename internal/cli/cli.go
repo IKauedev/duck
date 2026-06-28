@@ -137,6 +137,44 @@ func Run(appName string, commands []Command, args []string) int {
 	return 0
 }
 
+// RunWithOutput executa um comando redirecionando stdout e stderr para w.
+func RunWithOutput(appName string, commands []Command, args []string, w io.Writer) int {
+	filteredArgs, options, err := ExtractGlobalOptions(args)
+	if err != nil {
+		fmt.Fprintln(w, "Erro:", err)
+		return 1
+	}
+
+	ctx := Context{
+		AppName: appName,
+		Stdout:  w,
+		Stderr:  w,
+		Options: options,
+	}
+
+	if len(filteredArgs) == 0 {
+		PrintHelp(ctx, commands, nil)
+		return 0
+	}
+
+	if filteredArgs[0] == "help" || filteredArgs[0] == "-h" || filteredArgs[0] == "--help" {
+		PrintHelp(ctx, commands, filteredArgs[1:])
+		return 0
+	}
+
+	if len(filteredArgs) == 1 && (filteredArgs[0] == "--version" || filteredArgs[0] == "-V") {
+		fmt.Fprintln(w, version.Details())
+		return 0
+	}
+
+	if err := execute(ctx, commands, filteredArgs, nil); err != nil {
+		fmt.Fprintln(w, "Erro:", err)
+		return 1
+	}
+
+	return 0
+}
+
 func execute(ctx Context, commands []Command, args []string, path []string) error {
 	if len(args) == 0 {
 		PrintHelp(ctx, commands, path)
